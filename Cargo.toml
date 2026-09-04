@@ -1,0 +1,13 @@
+[package]
+name = "cvrp_interval_check"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+# inari implements IEEE 1788 interval arithmetic; the "gmp" feature provides the
+# correctly rounded logarithm used by the analytic integral.
+inari = { version = "2", features = ["gmp"] }
+rayon = "1"
+
+[profile.release]
+opt-level = 3
