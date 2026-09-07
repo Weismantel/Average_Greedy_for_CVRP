@@ -91,35 +91,34 @@ fn branch_segment_upper(p_lo: f64, p_hi: f64, br: Branch, l: f64, r: f64) -> f64
 
 /// Cut points for the partition of [0, 1], as exact floating-point numbers.
 ///
-/// Correctness does not depend on them: on every segment the bound below takes
-/// the minimum over all branches and the constant 1, which is valid wherever
-/// the cuts happen to lie.  They only control tightness.  Along t the minimum
-/// is attained by the branches one after the other, in a fixed order, and
-/// finally by the constant 1, so cutting where two denominators agree and where
-/// a quotient meets 1 isolates each piece of the envelope.  No cut is needed
-/// where a quotient stops being admissible: there the constant 1 is already the
-/// minimum, and the segment width is exactly the bound used for it.
-fn cut_points(p_lo: f64, branches: &[Branch]) -> ([f64; 5], usize) {
-    let mut candidates = [f64::NAN; 3];
-    for (k, br) in branches.iter().enumerate() {
-        // (1 - p_lo t) = (a - b t)
-        candidates[k] = (1.0 - br.a_lo) / (p_lo - br.b_hi);
-    }
-    if let [first, second] = branches {
-        // The branches share their numerator, so the smaller quotient is the
-        // one with the larger denominator; they swap where the denominators
-        // agree: a_1 - b_1 t = a_2 - b_2 t.
-        candidates[2] = (first.a_lo - second.a_lo) / (first.b_hi - second.b_hi);
-    }
-
-    let mut cuts = [0.0f64; 5];
+/// The branches are listed in the order in which they attain the minimum, and
+/// after the last of them the constant 1 does, so the envelope needs one cut
+/// per branch: consecutive branches swap where their denominators agree (they
+/// share their numerator, so the smaller quotient is the one with the larger
+/// denominator), and the last branch meets 1 where 1 - p_lo t = a - b t.  No
+/// cut is needed where a quotient stops being admissible: that happens after it
+/// has passed 1, where the constant branch is the minimum anyway.
+///
+/// Correctness does not depend on any of this.  Whatever the cuts are, the
+/// bound below stays valid, because on every segment it takes the minimum of
+/// the constant 1 and of branches that are bounds for the whole segment; a
+/// misplaced cut costs tightness only.
+fn cut_points(p_lo: f64, branches: &[Branch]) -> ([f64; 4], usize) {
+    let mut cuts = [0.0f64; 4];
     let mut n = 1;
-    for t in candidates {
+    let mut add = |t: f64| {
         if t > 0.0 && t < 1.0 {
             cuts[n] = t;
             n += 1;
         }
+    };
+
+    for pair in branches.windows(2) {
+        add((pair[0].a_lo - pair[1].a_lo) / (pair[0].b_hi - pair[1].b_hi));
     }
+    let last = branches[branches.len() - 1];
+    add((1.0 - last.a_lo) / (p_lo - last.b_hi));
+
     cuts[n] = 1.0;
     n += 1;
     cuts[..n].sort_unstable_by(f64::total_cmp);
@@ -131,11 +130,15 @@ fn cut_points(p_lo: f64, branches: &[Branch]) -> ([f64; 5], usize) {
 fn integral_upper(p_lo: f64, p_hi: f64, branches: &[Branch]) -> f64 {
     let (cuts, n) = cut_points(p_lo, branches);
     let mut total = const_interval!(0.0, 0.0);
-    for w in cuts[..n].windows(2) {
+    for (j, w) in cuts[..n].windows(2).enumerate() {
         let (l, r) = (w[0], w[1]);
         // The constant branch 1 bounds F on every segment.
         let mut best = (pt(r) - pt(l)).sup();
-        for br in branches {
+        // The cuts are placed so that segment j is where branch j attains the
+        // minimum; the remaining segment belongs to the constant branch.  Only
+        // this one branch is evaluated -- the others cannot improve the bound
+        // here, and evaluating them would only cost logarithms.
+        if let Some(br) = branches.get(j) {
             best = best.min(branch_segment_upper(p_lo, p_hi, *br, l, r));
         }
         total += pt(best);
@@ -182,16 +185,19 @@ fn upper_bound(bx: &Box3, target: f64) -> f64 {
     }
 
     // C_1/3 = 3 - 3r/2 + s int_0^1 min{1, two quotients} dt, with the two
-    // denominators displayed after Lemma 4.1.
+    // denominators displayed after Lemma 4.1, listed in the order in which they
+    // attain the minimum: at t = 0 the second denominator is smaller by
+    // 9/50 - m - 3lambda/2 >= 0 on D, and it decreases more slowly, by
+    // 4/25 + m/2 + lambda per unit of t, so the two swap exactly once.
     let s = rat(3.0, 2.0) * r + rat(4.0, 25.0) + m;
     let branches = [
         Branch {
-            a_lo: (rat(3.0, 2.0) * r - rat(1.0, 50.0) + TWO * m + rat(3.0, 2.0) * lambda).inf(),
-            b_hi: (rat(3.0, 2.0) * r + rat(16.0, 25.0) + rat(5.0, 2.0) * m + THREE * lambda).sup(),
-        },
-        Branch {
             a_lo: s.inf(),
             b_hi: (rat(3.0, 2.0) * r + rat(4.0, 5.0) + THREE * m + FOUR * lambda).sup(),
+        },
+        Branch {
+            a_lo: (rat(3.0, 2.0) * r - rat(1.0, 50.0) + TWO * m + rat(3.0, 2.0) * lambda).inf(),
+            b_hi: (rat(3.0, 2.0) * r + rat(16.0, 25.0) + rat(5.0, 2.0) * m + THREE * lambda).sup(),
         },
     ];
     let one_third_integral = integral_upper(p_lo, p_hi, &branches);
