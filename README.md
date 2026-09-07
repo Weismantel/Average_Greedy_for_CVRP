@@ -101,6 +101,60 @@ best-first subdivision of \(\mathcal D\) then certifies every parameter box at
 or below the downward-rounded representation of \(79/25\). Consequently, the
 accepted bound is strictly below the exact rational target.
 
+## Second implementation in Python
+
+`verify.py` re-proves the same upper bound independently, on top of
+[python-flint](https://github.com/flintlib/python-flint). It is standalone: no
+Rust or C++ toolchain, and no file other than `verify.py` has to be read in
+order to check the proof.
+
+It differs from the C++ and Rust programs in where the rigour comes from. Every
+coefficient of the problem is an affine function, with rational coefficients, of
+the endpoints of the parameter box, and bisecting a rational interval yields
+rational endpoints. So `verify.py` keeps the box endpoints, the branch data
+\(p_-,a_-,b_+\), the cut points and the constraint \(m+\lambda\le3/25\) as
+**exact rationals** (`flint.fmpq`); every decision the search makes -- branch
+admissibility, acceptance of a box, the final comparison against \(79/25\) --
+is an exact rational comparison, with no rounding to analyse. The only quantity
+that is not rational is the logarithm in the closed form above; it alone is
+evaluated in Arb ball arithmetic (`flint.arb`, rigorous by construction) and its
+ball upper endpoint is converted back to an exact rational. The whole
+numerical-soundness argument is therefore confined to the functions
+`upper_fmpq` and `segment_upper_bound`. Because the target \(79/25\) is an
+exact rational and each box bound is compared against it with a strict `<`,
+no "downward-rounded target" argument is needed.
+
+Parallelism is a static decomposition: the initial box is bisected into
+\(2^{12}\) task boxes whose union is exactly the initial box, and each task is
+proved independently in a worker process by the pure function `prove`. Running
+with `--jobs 1` performs the identical computation in one process.
+
+```bash
+source /path/to/venv/bin/activate     # provides python-flint
+python3 verify.py                     # ~25 s on 14 threads
+python3 verify.py --jobs 1            # same result, one process, ~2 min
+```
+
+Exit status is `0` when the bound is proved and `2` when a box could not be
+certified. A reference run reports
+
+```
+PROVED: max min{C_eta, C_1/3} <= 3.159999999871978 < 3.16 = 79/25
+boxes: 2634584, max depth: 22, jobs: 14, elapsed: 23.1s
+```
+
+The companion `selftest.py` cross-checks `verify.py` against independently
+written, deliberately naive implementations -- the closed-form antiderivative
+against a rigorous interval Riemann sum, the per-box bound against a plain-float
+re-transcription of the formulas above, the bound itself against a naive
+Riemann sum of the envelope at interior points, and the task decomposition
+against the domain \(\mathcal D\). It is a test of the transcription, not part
+of the proof, and `verify.py` does not refer to it:
+
+```bash
+python3 selftest.py
+```
+
 ## Feasible-witness search
 
 The lower search begins with a grid in \(r\) and the triangular
