@@ -8,14 +8,14 @@ botched antiderivative.  This file checks exactly that, by comparing verify.py
 against independently written, deliberately naive implementations:
 
   check_domain          that the searched region covers D and the target is
-                        79/25, both spelled out again from the lemma;
+                        3159/1000, both spelled out again independently;
   check_upper_fmpq      the one function that turns an Arb ball back into a
                         number, against the ball's own endpoints;
   check_antiderivative  the closed form of the branch integral, against a
                         rigorous interval Riemann sum that uses no
                         antiderivative at all;
   check_box_bound       the whole per-box bound, against a plain-float
-                        re-transcription of the coefficients displayed in
+                        re-transcription of the coefficients documented in
                         README.md -- this is what catches a mistyped constant
                         or a swapped box endpoint, in either direction;
   check_upper_bound     the defining property, that the per-box bound really is
@@ -57,14 +57,14 @@ def sample_point(rng):
 
 
 # ---------------------------------------------------------------------------
-# Check 0: the domain and the target are the ones the lemma talks about
+# Check 0: the domain is the one of the lemma, and the target is 3.159
 # ---------------------------------------------------------------------------
 
 
 def check_domain(samples=2000, seed=20260907):
     """The searched region must cover D = {33/50 <= r <= 1, m, lambda >= 0,
-    m + lambda <= 3/25} and the target must be 79/25."""
-    assert verify.TARGET == fmpq(79, 25), "wrong target"
+    m + lambda <= 3/25} and the target must be 3159/1000."""
+    assert verify.TARGET == fmpq(3159, 1000), "wrong target"
     assert verify.INITIAL_BOX[0] <= R_MIN and verify.INITIAL_BOX[1] >= R_MAX, "r range"
     assert verify.INITIAL_BOX[2] <= 0 and verify.INITIAL_BOX[4] <= 0, "m, lambda start above 0"
     assert (verify.INITIAL_BOX[3] >= SUM_MAX
@@ -84,7 +84,7 @@ def check_domain(samples=2000, seed=20260907):
             "restrict() cut away a point of D: r=%s m=%s lambda=%s -> %s"
             % (r, m, lam, box)
         )
-    print("ok  domain: target 79/25, %d boxes keep their points of D" % samples)
+    print("ok  domain: target 3159/1000, %d boxes keep their points of D" % samples)
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +240,7 @@ def float_upper_bound(box):
     s_hi = 3 / 2 * r_hi + 4 / 25 + m_hi
     branches = [
         (s_lo, 3 / 2 * r_hi + 4 / 5 + 3 * m_hi + 4 * lam_hi),
-        (3 / 2 * r_lo - 1 / 50 + 2 * m_lo + 3 / 2 * lam_lo,
+        (3 / 2 * r_lo + 7 / 100 + 3 / 2 * m_lo + 3 / 4 * lam_lo,
          3 / 2 * r_hi + 16 / 25 + 5 / 2 * m_hi + 3 * lam_hi),
     ]
     one_third_cost = 3 - 3 / 2 * r_lo + s_hi * float_integral_upper(p_lo, p_hi, branches)
@@ -317,10 +317,12 @@ def cost_eta(r, m, lam, pieces=100000):
 
 
 def cost_one_third(r, m, lam, pieces=100000):
-    """C_1/3 as displayed in README.md."""
+    """C_1/3 as implemented in verify.py: the formula displayed in README.md,
+    but with R_0(V_double)/8 -- not /4 -- subtracted in the constant term of
+    the first denominator."""
     p = 16 / 25 + 2 * m + 3 * lam
     quotients = [
-        (p, 3 / 2 * r - 1 / 50 + 2 * m + 3 / 2 * lam,
+        (p, 3 / 2 * r + 7 / 100 + 3 / 2 * m + 3 / 4 * lam,
          3 / 2 * r + 16 / 25 + 5 / 2 * m + 3 * lam),
         (p, 3 / 2 * r + 4 / 25 + m,
          3 / 2 * r + 4 / 5 + 3 * m + 4 * lam),

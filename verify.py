@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Rigorous verification of the upper bound of Lemma 4.1:
+"""Rigorous verification of a sharpened variant of the upper bound of
+Lemma 4.1:
 
-    max_{(r,m,lambda) in D} min{C_eta(r,m,lambda), C_1/3(r,m,lambda)} < 79/25,
+    max_{(r,m,lambda) in D} min{C_eta(r,m,lambda), C_1/3(r,m,lambda)} < 3159/1000,
     D = {33/50 <= r <= 1, m >= 0, lambda >= 0, m + lambda <= 3/25},
 
-with the functions as displayed in README.md.  This is an independent
-re-implementation of src/main.rs on top of python-flint.
+with C_eta as displayed in README.md, and C_1/3 as displayed there except that
+the constant term of its first denominator is s - R_0(V_double)/8 rather than
+s - R_0(V_double)/4 (see "Second implementation in Python" in README.md).
 
 How soundness is organized
 --------------------------
@@ -17,7 +19,7 @@ computed exactly, as `fmpq`, with no rounding whatsoever:
   * the box endpoints and the constraint m + lambda <= 3/25,
   * the branch data (p_lo, p_hi, a_lo, b_hi, s) and the cut points,
   * every comparison that steers the algorithm (branch admissibility,
-    acceptance of a box, the final comparison against 79/25).
+    acceptance of a box, the final comparison against 3159/1000).
 
 The one quantity that is not rational is the logarithm in the closed form of
 the branch integral.  It -- and only it -- is evaluated in Arb ball arithmetic,
@@ -41,10 +43,12 @@ from flint import arb, ctx, fmpq
 # exact value at any precision.
 ctx.prec = 128
 
-# The exact rational target of the lemma.  Bounds are compared against it with
-# a strict "<" in exact rational arithmetic, so a successful run establishes the
-# strict inequality of the lemma literally, with no rounding argument.
-TARGET = fmpq(79, 25)
+# The exact rational target, 3.159 (Lemma 4.1 itself has 79/25 = 3.16).  Bounds
+# are compared against it with a strict "<" in exact rational arithmetic, so a
+# successful run establishes the strict inequality literally, with no rounding
+# argument.
+# TARGET = fmpq(79, 25)
+TARGET = fmpq(3159, 1000)
 
 # Fails only if a box cannot be subdivided far enough; 2^90 is far beyond what
 # the certificate needs.
@@ -225,17 +229,19 @@ def upper_bound(box, target=TARGET):
     if eta_cost < target:
         return eta_cost
 
-    # C_1/3 = 3 - 3r/2 + s int_0^1 min{1, two quotients} dt, with the two
-    # denominators displayed after Lemma 4.1, listed in the order in which they
-    # attain the minimum: at t = 0 the second denominator is smaller by
-    # 9/50 - m - 3lambda/2 >= 0 on D, and it decreases more slowly, by
+    # C_1/3 = 3 - 3r/2 + s int_0^1 min{1, two quotients} dt.  The constant term
+    # of the second denominator is s - R_0(V_double)/8, with
+    # R_0(V_double) = 18/25 - 4m - 6lambda; the branches are listed in the order
+    # in which they attain the minimum: at t = 0 the second denominator is
+    # smaller by 9/100 - m/2 - 3lambda/4 >= 0 on D (since m/2 + 3lambda/4 <=
+    # 3(m + lambda)/4 <= 9/100), and it decreases more slowly, by
     # 4/25 + m/2 + lambda per unit of t, so the two swap exactly once.
     s_lo = fmpq(3, 2) * r_lo + fmpq(4, 25) + m_lo
     s_hi = fmpq(3, 2) * r_hi + fmpq(4, 25) + m_hi
     branches = [
         (s_lo, fmpq(3, 2) * r_hi + fmpq(4, 5) + 3 * m_hi + 4 * lam_hi),
         (
-            fmpq(3, 2) * r_lo - fmpq(1, 50) + 2 * m_lo + fmpq(3, 2) * lam_lo,
+            fmpq(3, 2) * r_lo + fmpq(7, 100) + fmpq(3, 2) * m_lo + fmpq(3, 4) * lam_lo,
             fmpq(3, 2) * r_hi + fmpq(16, 25) + fmpq(5, 2) * m_hi + 3 * lam_hi,
         ),
     ]
@@ -305,7 +311,7 @@ def split(box):
 
 
 def prove(box):
-    """Proves that min{C_eta, C_1/3} < 79/25 on the whole intersection of `box`
+    """Proves that min{C_eta, C_1/3} < TARGET on the whole intersection of `box`
     with D.  Returns (largest certified bound or None, boxes visited, maximum
     depth reached); raises Inconclusive if some sub-box could not be settled.
 
@@ -407,12 +413,12 @@ def main():
     bounds = [bound for bound, _, _ in results if bound is not None]
     assert bounds, "no box intersected D"
     bound = max(bounds)
-    assert bound < TARGET, "accepted a bound that is not below 79/25"
+    assert bound < TARGET, "accepted a bound that is not below the target"
 
     boxes = sum(visited for _, visited, _ in results)
     depth = max(d for _, _, d in results)
     print(
-        "PROVED: max min{C_eta, C_1/3} <= %s < 3.16 = 79/25" % decimal_upper(bound)
+        "PROVED: max min{C_eta, C_1/3} <= %s < %s" % (decimal_upper(bound), TARGET)
     )
     print(
         "boxes: %d, max depth: %d, jobs: %d, elapsed: %.1fs"
