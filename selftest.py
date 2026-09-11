@@ -321,10 +321,10 @@ def cost_one_third(r, m, lam, pieces=100000):
     """C_1/3 as displayed in README.md."""
     p = 159 / 250 + 2 * m + 3 * lam
     quotients = [
-        (p, 3 / 2 * r + 17 / 250 + 3 / 2 * m + 3 / 4 * lam,
-         3 / 2 * r + 159 / 250 + 5 / 2 * m + 3 * lam),
         (p, 3 / 2 * r + 159 / 1000 + m,
          3 / 2 * r + 159 / 200 + 3 * m + 4 * lam),
+        (p, 3 / 2 * r + 17 / 250 + 3 / 2 * m + 3 / 4 * lam,
+         3 / 2 * r + 159 / 250 + 5 / 2 * m + 3 * lam),
     ]
     return 3 - 3 / 2 * r + (3 / 2 * r + 159 / 1000 + m) * envelope_integral(quotients, pieces)
 

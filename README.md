@@ -1,7 +1,7 @@
 # Computational certificate for the reduction to a three-dimensional prism
 
 This directory contains a rigorous, reproducible proof of the hypothesis of the
-lemma "Reduction to a three-dimensional prism" (`New_Reduction.txt`): with
+lemma "Reduction to a three-dimensional prism": with
 \(\rho=\frac{3159}{1000}=3.159\),
 \[
 \max_{(r,m,\lambda)\in\mathcal D}
@@ -56,16 +56,19 @@ definition of \(\widehat C_\eta\) reads
 \right\}dt .
 \]
 Likewise, with \(\sigma=\sigma_{1/3}(V_\eta^1)\), the substitution
-\(x=\sigma t\), \(\sigma_{1/3}(V_0^\eta)=\frac32R_1(V_0^\eta)\) and
-\(\Delta=R_0(V_{\mathrm{single}})-R_1(V_{\mathrm{single}})\),
+\(t=s/\sigma\) and \(\Delta=R_0(V_{\mathrm{single}})-R_1(V_{\mathrm{single}})\),
+the two cost density functions are
+\[
+\Phi^{(1)}=\frac{1-R_0(V_{\mathrm{single}})\,t}{(1-t)\sigma-2t\Delta},
+\qquad
+\Phi^{(2)}=\frac{1-R_0(V_{\mathrm{single}})\,t}
+{(1-t)\sigma-\frac32t\Delta-\frac18R_0(V_{\mathrm{double}})},
+\]
+and
 \[
 \widehat C_{1/3}
-=\alpha+\frac32R_1(V_0^\eta)+\sigma\int_0^1\min\left\{1,
-\frac{1-R_0(V_{\mathrm{single}})\,t}
-{\sigma-\frac18R_0(V_{\mathrm{double}})-(\sigma+\frac32\Delta)t},
-\frac{1-R_0(V_{\mathrm{single}})\,t}
-{\sigma-(\sigma+2\Delta)t}
-\right\}dt .
+=\alpha+\frac32R_1(V_0^\eta)
++\sigma\int_0^1\min\bigl\{\Phi^{(1)},\Phi^{(2)},1\bigr\}\,dt .
 \]
 Substituting the values above gives the two expressions that `verify.py`
 checks:
@@ -80,13 +83,13 @@ checks:
 ={}&3-\frac32r+\left(\frac32r+\frac{159}{1000}+m\right)
 \int_0^1\min\left\{1,
 \frac{1-(\frac{159}{250}+2m+3\lambda)t}
-{\frac32r+\frac{17}{250}+\frac32m+\frac34\lambda
- -(\frac32r+\frac{159}{250}+\frac52m+3\lambda)t},
+{\frac32r+\frac{159}{1000}+m
+ -(\frac32r+\frac{159}{200}+3m+4\lambda)t},
 \right.\\[-2mm]
 &\hspace{57mm}\left.
 \frac{1-(\frac{159}{250}+2m+3\lambda)t}
-{\frac32r+\frac{159}{1000}+m
- -(\frac32r+\frac{159}{200}+3m+4\lambda)t}
+{\frac32r+\frac{17}{250}+\frac32m+\frac34\lambda
+ -(\frac32r+\frac{159}{250}+\frac52m+3\lambda)t}
 \right\}\,dt.
 \end{aligned}
 \]

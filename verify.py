@@ -228,18 +228,21 @@ def upper_bound(box, target=TARGET):
     if eta_cost < target:
         return eta_cost
 
-    # C_1/3 = 3 - 3r/2 + s int_0^1 min{1, two quotients} dt with
-    # s = sigma_1/3(V_eta^1) = 3r/2 + 159/1000 + m.  The constant term of the
-    # second denominator is s - R_0(V_double)/8, with R_0(V_double) =
-    # 91/125 - 4m - 6lambda; the branches are listed in the order in which
-    # they attain the minimum: at t = 0 the second denominator is
-    # smaller by 91/1000 - m/2 - 3lambda/4 >= 0 on D (since m/2 + 3lambda/4 <=
+    # C_1/3 = 3 - 3r/2 + s int_0^1 min{1, Phi^(1), Phi^(2)} dt with
+    # s = sigma_1/3(V_eta^1) = 3r/2 + 159/1000 + m, the quotients named as in
+    # README.md.  The constant term of the denominator of Phi^(2) is
+    # s - R_0(V_double)/8, with R_0(V_double) = 91/125 - 4m - 6lambda.  The
+    # branches are listed in the order in which they attain the minimum: at
+    # t = 0 the denominator of Phi^(2) is smaller by
+    # 91/1000 - m/2 - 3lambda/4 >= 0 on D (since m/2 + 3lambda/4 <=
     # 3(m + lambda)/4 <= 91/1000), and it decreases more slowly, by
     # 159/1000 + m/2 + lambda per unit of t, so the two swap exactly once.
     s_lo = fmpq(3, 2) * r_lo + fmpq(159, 1000) + m_lo
     s_hi = fmpq(3, 2) * r_hi + fmpq(159, 1000) + m_hi
     branches = [
+        # Phi^(1)
         (s_lo, fmpq(3, 2) * r_hi + fmpq(159, 200) + 3 * m_hi + 4 * lam_hi),
+        # Phi^(2)
         (
             fmpq(3, 2) * r_lo + fmpq(17, 250) + fmpq(3, 2) * m_lo + fmpq(3, 4) * lam_lo,
             fmpq(3, 2) * r_hi + fmpq(159, 250) + fmpq(5, 2) * m_hi + 3 * lam_hi,
