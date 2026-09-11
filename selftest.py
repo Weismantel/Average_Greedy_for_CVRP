@@ -43,15 +43,16 @@ import verify
 ctx.prec = 128
 
 
-# The domain D of Lemma 4.1, written out here independently of verify.py.
-R_MIN, R_MAX, SUM_MAX = fmpq(33, 50), fmpq(1), fmpq(3, 25)
+# The domain D of the reduction lemma, written out here independently of
+# verify.py.
+R_MIN, R_MAX, SUM_MAX = fmpq(659, 1000), fmpq(1), fmpq(91, 750)
 
 
 def sample_point(rng):
     """A random point (r, m, lambda) of D, as exact rationals."""
-    r = fmpq(rng.randrange(3300, 5000), 5000)
-    m = fmpq(rng.randrange(0, 1201), 10000)
-    lam = fmpq(rng.randrange(0, 1201 - int(m * 10000)), 10000)
+    r = R_MIN + (R_MAX - R_MIN) * fmpq(rng.randrange(0, 5001), 5000)
+    m = SUM_MAX * fmpq(rng.randrange(0, 1201), 1200)
+    lam = (SUM_MAX - m) * fmpq(rng.randrange(0, 1201), 1200)
     assert R_MIN <= r <= R_MAX and m >= 0 and lam >= 0 and m + lam <= SUM_MAX
     return r, m, lam
 
@@ -62,13 +63,13 @@ def sample_point(rng):
 
 
 def check_domain(samples=2000, seed=20260907):
-    """The searched region must cover D = {33/50 <= r <= 1, m, lambda >= 0,
-    m + lambda <= 3/25} and the target must be 3159/1000."""
+    """The searched region must cover D = {659/1000 <= r <= 1, m, lambda >= 0,
+    m + lambda <= 91/750} and the target must be 3159/1000."""
     assert verify.TARGET == fmpq(3159, 1000), "wrong target"
     assert verify.INITIAL_BOX[0] <= R_MIN and verify.INITIAL_BOX[1] >= R_MAX, "r range"
     assert verify.INITIAL_BOX[2] <= 0 and verify.INITIAL_BOX[4] <= 0, "m, lambda start above 0"
     assert (verify.INITIAL_BOX[3] >= SUM_MAX
-            and verify.INITIAL_BOX[5] >= SUM_MAX), "m, lambda stop below 3/25"
+            and verify.INITIAL_BOX[5] >= SUM_MAX), "m, lambda stop below 91/750"
 
     # restrict() may only remove points that are outside D: every point of D
     # that lies in a box must still lie in the restricted box.
@@ -229,19 +230,19 @@ def float_upper_bound(box):
     """min{C_eta, C_1/3} bound for a box, in plain floats, from README.md."""
     r_lo, r_hi, m_lo, m_hi, lam_lo, lam_hi = (float(x) for x in box)
 
-    # p = R_0(V_single) = 16/25 + 2m + 3 lambda
-    p_lo = 16 / 25 + 2 * m_lo + 3 * lam_lo
-    p_hi = 16 / 25 + 2 * m_hi + 3 * lam_hi
+    # p = R_0(V_single) = 159/250 + 2m + 3 lambda
+    p_lo = 159 / 250 + 2 * m_lo + 3 * lam_lo
+    p_hi = 159 / 250 + 2 * m_hi + 3 * lam_hi
 
-    eta = (2 * r_lo, 2 * r_hi + 16 / 25 + 2 * m_hi + 4 * lam_hi)
+    eta = (2 * r_lo, 2 * r_hi + 159 / 250 + 2 * m_hi + 4 * lam_hi)
     eta_cost = 5 / 2 - r_lo + 2 * r_hi * float_integral_upper(p_lo, p_hi, [eta])
 
-    s_lo = 3 / 2 * r_lo + 4 / 25 + m_lo
-    s_hi = 3 / 2 * r_hi + 4 / 25 + m_hi
+    s_lo = 3 / 2 * r_lo + 159 / 1000 + m_lo
+    s_hi = 3 / 2 * r_hi + 159 / 1000 + m_hi
     branches = [
-        (s_lo, 3 / 2 * r_hi + 4 / 5 + 3 * m_hi + 4 * lam_hi),
-        (3 / 2 * r_lo + 7 / 100 + 3 / 2 * m_lo + 3 / 4 * lam_lo,
-         3 / 2 * r_hi + 16 / 25 + 5 / 2 * m_hi + 3 * lam_hi),
+        (s_lo, 3 / 2 * r_hi + 159 / 200 + 3 * m_hi + 4 * lam_hi),
+        (3 / 2 * r_lo + 17 / 250 + 3 / 2 * m_lo + 3 / 4 * lam_lo,
+         3 / 2 * r_hi + 159 / 250 + 5 / 2 * m_hi + 3 * lam_hi),
     ]
     one_third_cost = 3 - 3 / 2 * r_lo + s_hi * float_integral_upper(p_lo, p_hi, branches)
 
@@ -311,23 +312,21 @@ def envelope_integral(quotients, pieces):
 
 def cost_eta(r, m, lam, pieces=100000):
     """C_eta as displayed in README.md."""
-    p = 16 / 25 + 2 * m + 3 * lam
-    quotients = [(p, 2 * r, 2 * r + 16 / 25 + 2 * m + 4 * lam)]
+    p = 159 / 250 + 2 * m + 3 * lam
+    quotients = [(p, 2 * r, 2 * r + 159 / 250 + 2 * m + 4 * lam)]
     return 5 / 2 - r + 2 * r * envelope_integral(quotients, pieces)
 
 
 def cost_one_third(r, m, lam, pieces=100000):
-    """C_1/3 as implemented in verify.py: the formula displayed in README.md,
-    but with R_0(V_double)/8 -- not /4 -- subtracted in the constant term of
-    the first denominator."""
-    p = 16 / 25 + 2 * m + 3 * lam
+    """C_1/3 as displayed in README.md."""
+    p = 159 / 250 + 2 * m + 3 * lam
     quotients = [
-        (p, 3 / 2 * r + 7 / 100 + 3 / 2 * m + 3 / 4 * lam,
-         3 / 2 * r + 16 / 25 + 5 / 2 * m + 3 * lam),
-        (p, 3 / 2 * r + 4 / 25 + m,
-         3 / 2 * r + 4 / 5 + 3 * m + 4 * lam),
+        (p, 3 / 2 * r + 17 / 250 + 3 / 2 * m + 3 / 4 * lam,
+         3 / 2 * r + 159 / 250 + 5 / 2 * m + 3 * lam),
+        (p, 3 / 2 * r + 159 / 1000 + m,
+         3 / 2 * r + 159 / 200 + 3 * m + 4 * lam),
     ]
-    return 3 - 3 / 2 * r + (3 / 2 * r + 4 / 25 + m) * envelope_integral(quotients, pieces)
+    return 3 - 3 / 2 * r + (3 / 2 * r + 159 / 1000 + m) * envelope_integral(quotients, pieces)
 
 
 def check_upper_bound(samples=60, seed=20260907):

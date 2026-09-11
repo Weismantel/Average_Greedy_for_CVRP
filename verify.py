@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""Rigorous verification of a sharpened variant of the upper bound of
-Lemma 4.1:
+"""Rigorous verification of the certificate of the reduction to a
+three-dimensional prism (see README.md):
 
     max_{(r,m,lambda) in D} min{C_eta(r,m,lambda), C_1/3(r,m,lambda)} < 3159/1000,
-    D = {33/50 <= r <= 1, m >= 0, lambda >= 0, m + lambda <= 3/25},
+    D = {659/1000 <= r <= 1, m >= 0, lambda >= 0, m + lambda <= 91/750},
 
-with C_eta as displayed in README.md, and C_1/3 as displayed there except that
-the constant term of its first denominator is s - R_0(V_double)/8 rather than
-s - R_0(V_double)/4 (see "Second implementation in Python" in README.md).
+with the functions as displayed in README.md.
 
 How soundness is organized
 --------------------------
@@ -16,7 +14,7 @@ coefficients, of the endpoints of the parameter box, and bisecting a rational
 interval produces rational endpoints.  Therefore *all* of the following are
 computed exactly, as `fmpq`, with no rounding whatsoever:
 
-  * the box endpoints and the constraint m + lambda <= 3/25,
+  * the box endpoints and the constraint m + lambda <= 91/750,
   * the branch data (p_lo, p_hi, a_lo, b_hi, s) and the cut points,
   * every comparison that steers the algorithm (branch admissibility,
     acceptance of a box, the final comparison against 3159/1000).
@@ -43,7 +41,7 @@ from flint import arb, ctx, fmpq
 # exact value at any precision.
 ctx.prec = 128
 
-# The exact rational target, 3.159 (Lemma 4.1 itself has 79/25 = 3.16).  Bounds
+# The exact rational target rho = 3159/1000 of the reduction lemma.  Bounds
 # are compared against it with a strict "<" in exact rational arithmetic, so a
 # successful run establishes the strict inequality literally, with no rounding
 # argument.
@@ -59,10 +57,10 @@ MAX_DEPTH = 90
 TASK_SPLITS = 12
 
 # A box is the 6-tuple of exact rational endpoints (r_lo, r_hi, m_lo, m_hi,
-# lambda_lo, lambda_hi).  A superset of D: the constraint m + lambda <= 3/25 is
-# imposed in restrict(), the other bounds are exact.
-CAP = fmpq(3, 25)
-INITIAL_BOX = (fmpq(33, 50), fmpq(1), fmpq(0), CAP, fmpq(0), CAP)
+# lambda_lo, lambda_hi).  A superset of D: the constraint m + lambda <= 91/750
+# is imposed in restrict(), the other bounds are exact.
+CAP = fmpq(91, 750)
+INITIAL_BOX = (fmpq(659, 1000), fmpq(1), fmpq(0), CAP, fmpq(0), CAP)
 
 
 class Inconclusive(Exception):
@@ -218,31 +216,33 @@ def upper_bound(box, target=TARGET):
     the minimum of the two is bounded by either one."""
     r_lo, r_hi, m_lo, m_hi, lam_lo, lam_hi = box
 
-    # p = R_0(V_single) = 16/25 + 2m + 3lambda.
-    p_lo = fmpq(16, 25) + 2 * m_lo + 3 * lam_lo
-    p_hi = fmpq(16, 25) + 2 * m_hi + 3 * lam_hi
+    # p = R_0(V_single) = 159/250 + 2m + 3lambda.
+    p_lo = fmpq(159, 250) + 2 * m_lo + 3 * lam_lo
+    p_hi = fmpq(159, 250) + 2 * m_hi + 3 * lam_hi
 
-    # C_eta = 5/2 - r + 2r int_0^1 min{1, (1-pt) / (2r - (2r+16/25+2m+4lambda)t)} dt.
-    eta = (2 * r_lo, 2 * r_hi + fmpq(16, 25) + 2 * m_hi + 4 * lam_hi)
+    # C_eta = 5/2 - r + 2r int_0^1 min{1, (1-pt) / (2r - bt)} dt with the slope
+    # b = 2r + 2R_0(V_single) - 2R_1(V_single) = 2r + 159/250 + 2m + 4lambda.
+    eta = (2 * r_lo, 2 * r_hi + fmpq(159, 250) + 2 * m_hi + 4 * lam_hi)
     eta_integral = integral_upper(p_lo, p_hi, [eta])
     eta_cost = fmpq(5, 2) - r_lo + 2 * r_hi * eta_integral
     if eta_cost < target:
         return eta_cost
 
-    # C_1/3 = 3 - 3r/2 + s int_0^1 min{1, two quotients} dt.  The constant term
-    # of the second denominator is s - R_0(V_double)/8, with
-    # R_0(V_double) = 18/25 - 4m - 6lambda; the branches are listed in the order
-    # in which they attain the minimum: at t = 0 the second denominator is
-    # smaller by 9/100 - m/2 - 3lambda/4 >= 0 on D (since m/2 + 3lambda/4 <=
-    # 3(m + lambda)/4 <= 9/100), and it decreases more slowly, by
-    # 4/25 + m/2 + lambda per unit of t, so the two swap exactly once.
-    s_lo = fmpq(3, 2) * r_lo + fmpq(4, 25) + m_lo
-    s_hi = fmpq(3, 2) * r_hi + fmpq(4, 25) + m_hi
+    # C_1/3 = 3 - 3r/2 + s int_0^1 min{1, two quotients} dt with
+    # s = sigma_1/3(V_eta^1) = 3r/2 + 159/1000 + m.  The constant term of the
+    # second denominator is s - R_0(V_double)/8, with R_0(V_double) =
+    # 91/125 - 4m - 6lambda; the branches are listed in the order in which
+    # they attain the minimum: at t = 0 the second denominator is
+    # smaller by 91/1000 - m/2 - 3lambda/4 >= 0 on D (since m/2 + 3lambda/4 <=
+    # 3(m + lambda)/4 <= 91/1000), and it decreases more slowly, by
+    # 159/1000 + m/2 + lambda per unit of t, so the two swap exactly once.
+    s_lo = fmpq(3, 2) * r_lo + fmpq(159, 1000) + m_lo
+    s_hi = fmpq(3, 2) * r_hi + fmpq(159, 1000) + m_hi
     branches = [
-        (s_lo, fmpq(3, 2) * r_hi + fmpq(4, 5) + 3 * m_hi + 4 * lam_hi),
+        (s_lo, fmpq(3, 2) * r_hi + fmpq(159, 200) + 3 * m_hi + 4 * lam_hi),
         (
-            fmpq(3, 2) * r_lo + fmpq(7, 100) + fmpq(3, 2) * m_lo + fmpq(3, 4) * lam_lo,
-            fmpq(3, 2) * r_hi + fmpq(16, 25) + fmpq(5, 2) * m_hi + 3 * lam_hi,
+            fmpq(3, 2) * r_lo + fmpq(17, 250) + fmpq(3, 2) * m_lo + fmpq(3, 4) * lam_lo,
+            fmpq(3, 2) * r_hi + fmpq(159, 250) + fmpq(5, 2) * m_hi + 3 * lam_hi,
         ),
     ]
     one_third_integral = integral_upper(p_lo, p_hi, branches)
@@ -253,19 +253,19 @@ def upper_bound(box, target=TARGET):
 
 def restrict(box):
     """Drops boxes that are disjoint from D and shrinks the remaining ones to
-    the constraint m + lambda <= 3/25.  Returns None if the box is disjoint
+    the constraint m + lambda <= 91/750.  Returns None if the box is disjoint
     from D."""
     r_lo, r_hi, m_lo, m_hi, lam_lo, lam_hi = box
 
     # Every point of the box violates the constraint if already the smallest
-    # sum in it exceeds 3/25.
+    # sum in it exceeds 91/750.
     if m_lo + lam_lo > CAP:
         return None
 
-    # Every feasible point of the box has m <= 3/25 - lambda_lo and
-    # lambda <= 3/25 - m_lo, so these two contractions keep the whole
+    # Every feasible point of the box has m <= 91/750 - lambda_lo and
+    # lambda <= 91/750 - m_lo, so these two contractions keep the whole
     # intersection of the box with D.  Neither can fall below the corresponding
-    # lower endpoint, because m_lo + lambda_lo <= 3/25 was just checked.
+    # lower endpoint, because m_lo + lambda_lo <= 91/750 was just checked.
     m_cap = CAP - lam_lo
     if m_cap < m_hi:
         m_hi = m_cap
@@ -275,9 +275,9 @@ def restrict(box):
     return (r_lo, r_hi, m_lo, m_hi, lam_lo, lam_hi)
 
 
-# Reciprocals of the extents of D: 17/50 in r, 3/25 in m and lambda.
-_R_SCALE = fmpq(50, 17)
-_ML_SCALE = fmpq(25, 3)
+# Reciprocals of the extents of D: 341/1000 in r, 91/750 in m and lambda.
+_R_SCALE = fmpq(1000, 341)
+_ML_SCALE = fmpq(750, 91)
 
 
 def split(box):
