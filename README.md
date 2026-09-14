@@ -166,10 +166,21 @@ and hence `1 − p₋·t ≥ 1 − t ≥ 0` on `[0, 1]`.
 
 ## Running it
 
+The only dependency is [`python-flint`](https://pypi.org/project/python-flint/)
+(Python ≥ 3.10). Create the virtual environment once:
+
 ```bash
-source /path/to/venv/bin/activate     # provides python-flint; $VENV in the dev container
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+Then run the verification:
+
+```bash
+source .venv/bin/activate
 python3 verify.py                     # ~80 s on 14 threads
 python3 verify.py --jobs 1            # same result, one process, ~3.5 min
+python3 selftest.py                   # redundant cross-checks, not part of the certificate
 ```
 
 Exit status is `0` when the bound is proved and `2` when a box could not be

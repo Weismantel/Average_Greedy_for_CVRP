@@ -333,3 +333,6 @@ TSWLatexianTemp*
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Virtual environment
+.venv/
