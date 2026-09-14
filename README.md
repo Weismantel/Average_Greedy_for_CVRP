@@ -4,8 +4,6 @@ This repository contains a python script to check the conditions of the lemma
 "Reduction to a three-dimensional prism" in the paper. This is implemented in
 `verify.py`. Every computation is done using rational arithmetic, except for
 the logarithm, which is done using Arb balls to rule out rounding errors.
-The file `selftest.py` only does redundant checks to catch
-implementation bugs, and is not part of the certificate.
 
 
 ## Problem statement
