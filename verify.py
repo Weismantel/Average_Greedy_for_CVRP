@@ -1,45 +1,6 @@
 #!/usr/bin/env python3
-"""Rigorous verification of the certificate of the reduction to a
-three-dimensional prism (see README.md):
-
-    max_{(r,m,lambda) in D} min{C_eta(r,m,lambda) - alpha * Opt,
-                                C_1/3(r,m,lambda) - alpha * Opt} < 1659/1000,
-    D = {659/1000 <= r <= 1, m >= 0, lambda >= 0, m + lambda <= 91/750},
-
-with the functions as displayed in README.md.
-
-Why alpha does not appear
--------------------------
-The lemma asks for min{C_eta, C_1/3} < rho with rho = alpha + 1.659, and each of
-the two cost bounds contains alpha exactly once, as an additive alpha * Opt.  So
-alpha cancels from the inequality:
-
-    min{C_eta, C_1/3} < alpha + 1.659
-      <=>  min{C_eta - alpha * Opt, C_1/3 - alpha * Opt} < 1.659
-
-and this program certifies the right-hand form.  Nothing here depends on the
-value of alpha, so the certificate establishes the hypothesis of the lemma for
-every alpha at once.
-
-How soundness is organized
---------------------------
-Every coefficient of the problem is an affine function, with rational
-coefficients, of the endpoints of the parameter box, and bisecting a rational
-interval produces rational endpoints.  Therefore *all* of the following are
-computed exactly, as `fmpq`, with no rounding whatsoever:
-
-  * the box endpoints and the constraint m + lambda <= 91/750,
-  * the branch data (p_lo, p_hi, a_lo, b_hi, s) and the cut points,
-  * every comparison that steers the algorithm (branch admissibility,
-    acceptance of a box, the final comparison against 1659/1000).
-
-The one quantity that is not rational is the logarithm in the closed form of
-the branch integral.  It -- and only it -- is evaluated in Arb ball arithmetic,
-which is rigorous by construction, and the ball's upper endpoint is converted
-back to an exact rational.  So the whole numerical-soundness argument is
-confined to `upper_fmpq` and `segment_upper_bound` below; everything else is
-exact arithmetic and needs no rounding analysis.
-
+"""
+See README.md for the problem statement.
 Usage:  python3 verify.py [--jobs N]      (exit 0 proved, 2 inconclusive)
 """
 
@@ -55,10 +16,9 @@ from flint import arb, ctx, fmpq
 # exact value at any precision.
 ctx.prec = 128
 
-# The exact rational target rho - alpha = 1659/1000 of the reduction lemma,
-# whose rho is alpha + 1.659.  Bounds are compared against it with a strict "<"
-# in exact rational arithmetic, so a successful run establishes the strict
-# inequality literally, with no rounding argument.
+# The target of the reduction lemma. Bounds are compared against it with
+# a strict "<" in exact rational arithmetic, so a successful run establishes the
+# strict inequality
 RHO_MINUS_ALPHA = fmpq(1659, 1000)
 
 # Fails only if a box cannot be subdivided far enough; 2^90 is far beyond what
@@ -90,17 +50,9 @@ class Inconclusive(Exception):
         super().__init__(box)
         self.box = box
 
-
-# ---------------------------------------------------------------------------
-# The quantities of the paper, at a point (r, m, lambda) of the prism
-# ---------------------------------------------------------------------------
 #
-# One function per line of the variable transformation of the reduction lemma,
-# under the normalization Opt = 1.  They are the only place where the constants
-# of the reduction appear; everything below is assembled from them, so the code
-# can be checked against the paper formula by formula instead of against a
-# hand-flattened polynomial.
-
+# The variable transformation
+#
 
 def R1_V0_eta(r, m, lam):
     return 1 - r
@@ -127,16 +79,10 @@ def R0_V_double(r, m, lam):
 
 
 def R1_V_eta_one(r, m, lam):
-    """R_1(V_eta^1) = Opt - R_1(V_0^eta), which equals r on the prism.
-
-    The transformation is consistent: summing the three parts of V_eta^1 gives
-    R_1(V_eta^{1/3}) + R_1(V_single) + R_1(V_double) = r as well.
-    """
     return 1 - R1_V0_eta(r, m, lam)
 
 
 def sigma_third(r, m, lam):
-    """sigma_{1/3}(V_eta^1); equals 3/2 r + 159/1000 + m on the prism."""
     return (
         fmpq(3, 2) * R1_V_eta_third(r, m, lam)
         + 3 * (R1_V_single(r, m, lam) + R1_V_double(r, m, lam))
@@ -145,7 +91,6 @@ def sigma_third(r, m, lam):
 
 
 def Delta(r, m, lam):
-    """Delta = R_0(V_single) - R_1(V_single); equals 159/500 + m + 2 lambda."""
     return R0_V_single(r, m, lam) - R1_V_single(r, m, lam)
 
 
@@ -181,15 +126,10 @@ def upper_fmpq(x):
 # and the denominator only shrinks, while staying positive.
 
 
+# Compute an upper bound for the integral of
+#     F(t) = min{1, (1 - p t) / (a - b t)}
+# on the interval [l, r] for p in [p_lo, p_hi], a >= a_lo, b <= b_hi.
 def segment_upper_bound(p_lo, p_hi, a_lo, b_hi, l, r):
-    """Certified upper bound, as an exact rational, for the integral over
-    [l, r] of the true integrand
-
-        F(t) = min{1, quotients of the branches that are admissible at t},
-
-    using only this branch.  Returns the segment width -- always a valid bound,
-    since F <= 1 -- unless the branch provably bounds F on all of [l, r].
-    """
     width = r - l
 
     # The quotient may replace F only where numerator and denominator are
@@ -267,9 +207,8 @@ def integral_upper(p_lo, p_hi, branches):
         # The constant branch 1 bounds F on every segment.
         best = r - l
         # The cuts are placed so that segment j is where branch j attains the
-        # minimum; the remaining segment belongs to the constant branch.  Only
-        # this one branch is evaluated -- the others cannot improve the bound
-        # here, and evaluating them would only cost logarithms.
+        # minimum; the remaining segment belongs to the constant branch. Note
+        # that choosing the wrong branch can only be pessimistic
         if j < len(branches):
             a_lo, b_hi = branches[j]
             candidate = segment_upper_bound(p_lo, p_hi, a_lo, b_hi, l, r)
