@@ -176,9 +176,7 @@ Then run the verification:
 
 ```bash
 source .venv/bin/activate
-python3 verify.py                     # ~80 s on 14 threads
-python3 verify.py --jobs 1            # same result, one process, ~3.5 min
-python3 selftest.py                   # redundant cross-checks, not part of the certificate
+python3 verify.py # ~80 s on 14 threads
 ```
 
 Exit status is `0` when the bound is proved and `2` when a box could not be
