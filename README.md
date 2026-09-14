@@ -24,7 +24,7 @@ it holds that
 
 Here `Ĉ_η` and `Ĉ_1/3` are the two cost bounds of the paper (see definitions below),
 evaluated on an instance normalised to `Opt = 1` under the variable substitution
-of the reduction lemma (Section 4). Because the target of the lemma is `ρ = α + 1.659`, this *is* the lemma's
+of the reduction lemma (see below). Because the target of the lemma is `ρ = α + 1.659`, this *is* the lemma's
 hypothesis
 
 ```
@@ -122,7 +122,7 @@ The three quantities that the cost bounds need on top of these follow:
 | --- | --- | --- |
 | `R₁(V_η¹)` | `Opt − R₁(V_0^η)` | `r` |
 | `Δ` | `R₀(V_single) − R₁(V_single)` | `159/500 + m + 2λ` |
-| `σ = σ_1/3(V_η¹)` | see 3.3 | `(3/2)·r + 159/1000 + m` |
+| `σ = σ_1/3(V_η¹)` | see above | `(3/2)·r + 159/1000 + m` |
 
 
 
@@ -144,12 +144,27 @@ so the three branches are
 | `Φ⁽¹⁾` | `R₀(V_single)` | `σ` | `σ + 2Δ` |
 | `Φ⁽²⁾` | `R₀(V_single)` | `σ − R₀(V_double)/8` | `σ + (3/2)·Δ` |
 
-As stipulated in the paper, a fraction is treated as `+∞` whenever its
-denominator is non-positive. Since the pointwise minimum already contains the
-constant branch `1`, the implementation equivalently represents an inadmissible
-quotient by `1`.
+As stipulated in the paper, a fraction is `+∞` exactly when its denominator is
+negative — the sign of the numerator does not matter, so a quotient with a
+negative numerator is simply a negative value, and the pointwise minimum takes
+it. Since that minimum already contains the constant branch `1`, the
+implementation equivalently represents an inadmissible quotient by `1`. A
+denominator of exactly `0` occurs at a single `t`, so it changes no integral;
+`verify.py` declines the quotient there.
 
-## 8. Running it
+On a parameter box `verify.py` bounds `p` from below by `p₋` and uses
+`(1 − p₋·t) / (a₋ − b₊·t)`. Besides a positive denominator, that relaxation
+needs `1 − p₋·t ≥ 0` — for a negative numerator the worse case would be the
+*largest* denominator, not the smallest. It holds automatically, because
+`m + λ ≤ 91/750` gives
+
+```
+p₋ = 159/250 + 2m + 3λ  ≤  159/250 + 3·(91/750)  =  159/250 + 91/250  =  1
+```
+
+and hence `1 − p₋·t ≥ 1 − t ≥ 0` on `[0, 1]`.
+
+## Running it
 
 ```bash
 source /path/to/venv/bin/activate     # provides python-flint; $VENV in the dev container

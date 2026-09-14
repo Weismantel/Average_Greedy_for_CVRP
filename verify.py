@@ -117,31 +117,29 @@ def upper_fmpq(x):
 #
 # A branch is the pair (a_lo, b_hi) of exact rational coefficient bounds of one
 # quotient, already reduced to the form that bounds it on the whole parameter
-# box.  With p in [p_lo, p_hi], a >= a_lo and b <= b_hi, the true quotient
-# satisfies, for t >= 0,
+# box.  With p >= p_lo, a >= a_lo and b <= b_hi, the true quotient satisfies,
+# for t >= 0,
 #
 #     (1 - p t) / (a - b t) <= (1 - p_lo t) / (a_lo - b_hi t)
 #
-# as soon as the right-hand denominator is positive: the numerator only grows
-# and the denominator only shrinks, while staying positive.
+# wherever a_lo - b_hi t > 0 and 1 - p_lo t >= 0: the numerator only grows and
+# the denominator only shrinks, while both stay non-negative.
 
 
 # Compute an upper bound for the integral of
 #     F(t) = min{1, (1 - p t) / (a - b t)}
-# on the interval [l, r] for p in [p_lo, p_hi], a >= a_lo, b <= b_hi.
-def segment_upper_bound(p_lo, p_hi, a_lo, b_hi, l, r):
+# on the interval [l, r] for p >= p_lo, a >= a_lo, b <= b_hi.
+def segment_upper_bound(p_lo, a_lo, b_hi, l, r):
     width = r - l
 
-    # The quotient may replace F only where numerator and denominator are
-    # positive for *every* parameter of the box, i.e. where 1 - p_hi t > 0 and
-    # a_lo - b_hi t > 0.  Note the asymmetry: admissibility is decided with
-    # p_hi, the bound itself uses p_lo.  Both expressions are affine in t, so
-    # positivity at the two endpoints certifies the whole segment.  These are
-    # exact rational comparisons.
+    # As in the paper, a fraction is infinity where its denominator is
+    # negative. So the quotient may be used wherever a_lo - b_hi t > 0,
+    # plus 1 - p_lo t >= 0 (needed for the relaxation above). Both are
+    # affine in t, so it suffices to check the endpoints
     if b_hi <= 0:
         return width
     for t in (l, r):
-        if not (1 - p_hi * t > 0 and a_lo - b_hi * t > 0):
+        if not (a_lo - b_hi * t > 0 and 1 - p_lo * t >= 0):
             return width
 
     # int_l^r (1 - p t) / (a - b t) dt
@@ -197,9 +195,9 @@ def cut_points(p_lo, branches):
     return cuts
 
 
-def integral_upper(p_lo, p_hi, branches):
+def integral_upper(p_lo, branches):
     """Certified upper bound, as an exact rational, for int_0^1 F(t) dt on the
-    parameter box described by p_lo, p_hi and the branches."""
+    parameter box described by p_lo and the branches."""
     cuts = cut_points(p_lo, branches)
     total = fmpq(0)
     for j in range(len(cuts) - 1):
@@ -211,7 +209,7 @@ def integral_upper(p_lo, p_hi, branches):
         # that choosing the wrong branch can only be pessimistic
         if j < len(branches):
             a_lo, b_hi = branches[j]
-            candidate = segment_upper_bound(p_lo, p_hi, a_lo, b_hi, l, r)
+            candidate = segment_upper_bound(p_lo, a_lo, b_hi, l, r)
             if candidate < best:
                 best = candidate
         total += best
@@ -227,9 +225,8 @@ def integral_upper(p_lo, p_hi, branches):
 
 def upper_bound(box, target=RHO_MINUS_ALPHA):
     """Certified upper bound, as an exact rational, for
-    min{C_eta - alpha * Opt, C_1/3 - alpha * Opt} on the box.  The eta bound
-    alone is returned as soon as it settles the box, since the minimum of the
-    two is bounded by either one."""
+    min{C_eta - alpha * Opt, C_1/3 - alpha * Opt} on the box.
+    """
     r_lo, r_hi, m_lo, m_hi, lam_lo, lam_hi = box
 
     # Every quantity of the paper is affine in (r, m, lambda) with coefficients
@@ -238,9 +235,9 @@ def upper_bound(box, target=RHO_MINUS_ALPHA):
     lo = (r_lo, m_lo, lam_lo)
     hi = (r_hi, m_hi, lam_hi)
 
-    # p = R_0(V_single) increases in m and in lambda.
+    # p = R_0(V_single) increases in m and in lambda; only its minimum is
+    # needed, since it appears in a numerator that has to be over-estimated.
     p_lo = R0_V_single(*lo)
-    p_hi = R0_V_single(*hi)
 
     # Delta = R_0(V_single) - R_1(V_single) increases in m and in lambda.  It
     # enters only the denominator slopes, which have to be over-estimated, so
@@ -262,7 +259,7 @@ def upper_bound(box, target=RHO_MINUS_ALPHA):
     #     + 2 R_1(V_eta^1) int_0^1 min{1, (1 - R_0(V_single) t) / (a - b t)} dt,
     #   a = 2 R_1(V_eta^1),   b = 2 R_1(V_eta^1) + 2 Delta.
     branch_eta = (2 * R1_V_eta_one_min, 2 * R1_V_eta_one_max + 2 * delta_max)
-    integral_eta = integral_upper(p_lo, p_hi, [branch_eta])
+    integral_eta = integral_upper(p_lo, [branch_eta])
     C_hat_eta_minus_alpha = R1_V0_eta_max + 2 * R1_V_eta_one_max * integral_eta
     if C_hat_eta_minus_alpha < target:
         return C_hat_eta_minus_alpha
@@ -293,7 +290,7 @@ def upper_bound(box, target=RHO_MINUS_ALPHA):
         # Phi^(2)
         (sigma_min - R0_double_max / 8, sigma_max + fmpq(3, 2) * delta_max),
     ]
-    integral_third = integral_upper(p_lo, p_hi, branches_third)
+    integral_third = integral_upper(p_lo, branches_third)
     C_hat_third_minus_alpha = (
         fmpq(3, 2) * R1_V0_eta_max + sigma_max * integral_third
     )

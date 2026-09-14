@@ -169,7 +169,7 @@ def check_antiderivative(samples=60, seed=20260907):
         if not (1 - p * r > 0 and a - b * r > 0):
             continue
 
-        got = verify.segment_upper_bound(p, p, a, b, l, r)
+        got = verify.segment_upper_bound(p, a, b, l, r)
 
         enclosure = quotient_integral_enclosure(p, a, b, l, r)
         low = -verify.upper_fmpq(-enclosure)  # exact lower endpoint of the ball
@@ -198,9 +198,9 @@ def check_antiderivative(samples=60, seed=20260907):
 # Delta, each evaluated at one corner of the box, chosen by the sign of its
 # coefficients.  Getting a sign wrong would silently *under*-estimate the true
 # bound, which no other check here would notice, so the bracketing is checked
-# directly: at any point of the box, the numerator coefficient must lie between
-# p_lo and p_hi, every denominator constant must be at least a_lo, and every
-# denominator slope at most b_hi.
+# directly: at any point of the box, the numerator coefficient must be at least
+# p_lo, every denominator constant at least a_lo, and every denominator slope at
+# most b_hi.
 #
 # This check shares verify.py's formulas on purpose -- what it tests is the
 # choice of corner, not the constants, which check_box_bound covers.
@@ -211,7 +211,7 @@ def box_branch_data(box):
     r_lo, r_hi, m_lo, m_hi, lam_lo, lam_hi = box
     lo, hi = (r_lo, m_lo, lam_lo), (r_hi, m_hi, lam_hi)
 
-    p_lo, p_hi = verify.R0_V_single(*lo), verify.R0_V_single(*hi)
+    p_lo = verify.R0_V_single(*lo)
     delta_max = verify.Delta(*hi)
     sigma_min, sigma_max = verify.sigma_third(*lo), verify.sigma_third(*hi)
     R0_double_max = verify.R0_V_double(*lo)
@@ -223,7 +223,7 @@ def box_branch_data(box):
         # Phi^(2)
         (sigma_min - R0_double_max / 8, sigma_max + fmpq(3, 2) * delta_max),
     ]
-    return p_lo, p_hi, sigma_max, verify.R1_V0_eta(*lo), branches
+    return p_lo, sigma_max, verify.R1_V0_eta(*lo), branches
 
 
 def point_branch_data(r, m, lam):
@@ -250,7 +250,7 @@ def check_monotonicity(boxes=400, points=25, seed=20260907):
         box = verify.restrict((r, r + width, m, m + width, lam, lam + width))
         if box is None:
             continue
-        p_lo, p_hi, sigma_max, R1_V0_eta_max, branches = box_branch_data(box)
+        p_lo, sigma_max, R1_V0_eta_max, branches = box_branch_data(box)
 
         for _ in range(points):
             point = tuple(
@@ -259,7 +259,7 @@ def check_monotonicity(boxes=400, points=25, seed=20260907):
                 for i in range(3)
             )
             p, sigma, R1_V0_eta, point_branches = point_branch_data(*point)
-            assert p_lo <= p <= p_hi, "R_0(V_single) escapes [p_lo, p_hi] at %s" % (point,)
+            assert p_lo <= p, "R_0(V_single) falls below p_lo at %s" % (point,)
             assert sigma <= sigma_max, "sigma_{1/3} exceeds its box maximum at %s" % (point,)
             assert R1_V0_eta <= R1_V0_eta_max, (
                 "R_1(V_0^eta) exceeds its box maximum at %s" % (point,))
@@ -288,7 +288,7 @@ def check_monotonicity(boxes=400, points=25, seed=20260907):
 # discrepancy between the paper's formulas and the flattened form shows up here.
 
 
-def float_integral_upper(p_lo, p_hi, branches):
+def float_integral_upper(p_lo, branches):
     cuts = [0.0, 1.0]
     for (a0, b0), (a1, b1) in zip(branches, branches[1:]):
         if b0 != b1:
@@ -309,7 +309,7 @@ def float_integral_upper(p_lo, p_hi, branches):
         if j < len(branches):
             a, b = branches[j]
             usable = b > 0.0 and all(
-                1.0 - p_hi * t > 0.0 and a - b * t > 0.0 for t in (l, r)
+                a - b * t > 0.0 and 1.0 - p_lo * t >= 0.0 for t in (l, r)
             )
             if usable:
                 value = (p_lo / b) * (r - l) + ((b - a * p_lo) / (b * b)) * math.log(
@@ -327,11 +327,10 @@ def float_upper_bound(box):
 
     # p = R_0(V_single) = 159/250 + 2m + 3 lambda
     p_lo = 159 / 250 + 2 * m_lo + 3 * lam_lo
-    p_hi = 159 / 250 + 2 * m_hi + 3 * lam_hi
 
     eta = (2 * r_lo, 2 * r_hi + 159 / 250 + 2 * m_hi + 4 * lam_hi)
     C_hat_eta_minus_alpha = (
-        1 - r_lo + 2 * r_hi * float_integral_upper(p_lo, p_hi, [eta])
+        1 - r_lo + 2 * r_hi * float_integral_upper(p_lo, [eta])
     )
 
     sigma_lo = 3 / 2 * r_lo + 159 / 1000 + m_lo
@@ -342,7 +341,7 @@ def float_upper_bound(box):
          3 / 2 * r_hi + 159 / 250 + 5 / 2 * m_hi + 3 * lam_hi),
     ]
     C_hat_third_minus_alpha = (
-        3 / 2 - 3 / 2 * r_lo + sigma_hi * float_integral_upper(p_lo, p_hi, branches)
+        3 / 2 - 3 / 2 * r_lo + sigma_hi * float_integral_upper(p_lo, branches)
     )
 
     return min(C_hat_eta_minus_alpha, C_hat_third_minus_alpha)
@@ -356,9 +355,9 @@ def check_box_bound(samples=400, seed=20260907):
     worst = 0.0
     for i in range(samples):
         r, m, lam = sample_point(rng)
-        # Widths from 0 (a point) up to the whole domain; every fourth sample is
-        # anchored at the corner m = lambda = 0, where wide boxes make p_hi
-        # exceed 1 and the admissibility test in t actually bites.
+        # Widths from 0 (a point) up to the whole domain; every fourth sample
+        # is anchored at the corner m = lambda = 0, where the boxes are widest
+        # and the admissibility test in t comes closest to biting.
         width = fmpq(0) if i % 4 == 1 else fmpq(1, 2 ** rng.randrange(1, 30))
         if i % 4 == 0:
             m = lam = fmpq(0)
@@ -392,9 +391,9 @@ def check_box_bound(samples=400, seed=20260907):
 def envelope_integral(quotients, pieces):
     """Midpoint Riemann sum of  t -> min{1, admissible quotients}  over [0, 1].
 
-    Following README.md, a quotient counts only where its numerator and its
-    denominator are positive; elsewhere the fraction is treated as infinity,
-    which the constant branch 1 absorbs.
+    Following README.md, a quotient counts wherever its denominator is
+    positive -- the sign of the numerator does not matter.  Elsewhere the
+    fraction is infinity, which the constant branch 1 absorbs.
     """
     total = 0.0
     for i in range(pieces):
@@ -403,7 +402,7 @@ def envelope_integral(quotients, pieces):
         for p, a, b in quotients:
             numerator = 1.0 - p * t
             denominator = a - b * t
-            if numerator > 0.0 and denominator > 0.0:
+            if denominator > 0.0:
                 value = min(value, numerator / denominator)
         total += value
     return total / pieces
