@@ -2,10 +2,24 @@
 """Rigorous verification of the certificate of the reduction to a
 three-dimensional prism (see README.md):
 
-    max_{(r,m,lambda) in D} min{C_eta(r,m,lambda), C_1/3(r,m,lambda)} < 3159/1000,
+    max_{(r,m,lambda) in D} min{C_eta(r,m,lambda) - alpha * Opt,
+                                C_1/3(r,m,lambda) - alpha * Opt} < 1659/1000,
     D = {659/1000 <= r <= 1, m >= 0, lambda >= 0, m + lambda <= 91/750},
 
 with the functions as displayed in README.md.
+
+Why alpha does not appear
+-------------------------
+The lemma asks for min{C_eta, C_1/3} < rho with rho = alpha + 1.659, and each of
+the two cost bounds contains alpha exactly once, as an additive alpha * Opt.  So
+alpha cancels from the inequality:
+
+    min{C_eta, C_1/3} < alpha + 1.659
+      <=>  min{C_eta - alpha * Opt, C_1/3 - alpha * Opt} < 1.659
+
+and this program certifies the right-hand form.  Nothing here depends on the
+value of alpha, so the certificate establishes the hypothesis of the lemma for
+every alpha at once.
 
 How soundness is organized
 --------------------------
@@ -17,7 +31,7 @@ computed exactly, as `fmpq`, with no rounding whatsoever:
   * the box endpoints and the constraint m + lambda <= 91/750,
   * the branch data (p_lo, p_hi, a_lo, b_hi, s) and the cut points,
   * every comparison that steers the algorithm (branch admissibility,
-    acceptance of a box, the final comparison against 3159/1000).
+    acceptance of a box, the final comparison against 1659/1000).
 
 The one quantity that is not rational is the logarithm in the closed form of
 the branch integral.  It -- and only it -- is evaluated in Arb ball arithmetic,
@@ -41,12 +55,11 @@ from flint import arb, ctx, fmpq
 # exact value at any precision.
 ctx.prec = 128
 
-# The exact rational target rho = 3159/1000 of the reduction lemma.  Bounds
-# are compared against it with a strict "<" in exact rational arithmetic, so a
-# successful run establishes the strict inequality literally, with no rounding
-# argument.
-# TARGET = fmpq(79, 25)
-TARGET = fmpq(3159, 1000)
+# The exact rational target rho - alpha = 1659/1000 of the reduction lemma,
+# whose rho is alpha + 1.659.  Bounds are compared against it with a strict "<"
+# in exact rational arithmetic, so a successful run establishes the strict
+# inequality literally, with no rounding argument.
+RHO_MINUS_ALPHA = fmpq(1659, 1000)
 
 # Fails only if a box cannot be subdivided far enough; 2^90 is far beyond what
 # the certificate needs.
@@ -56,11 +69,16 @@ MAX_DEPTH = 90
 # parallel work.  Purely a scheduling parameter: their union is the initial box.
 TASK_SPLITS = 12
 
+# The triangular prism D of the reduction lemma:
+#     659/1000 <= r <= 1,  m >= 0,  lambda >= 0,  m + lambda <= 91/750.
+R_MIN = fmpq(659, 1000)
+R_MAX = fmpq(1)
+M_PLUS_LAMBDA_CAP = fmpq(91, 750)
+
 # A box is the 6-tuple of exact rational endpoints (r_lo, r_hi, m_lo, m_hi,
-# lambda_lo, lambda_hi).  A superset of D: the constraint m + lambda <= 91/750
-# is imposed in restrict(), the other bounds are exact.
-CAP = fmpq(91, 750)
-INITIAL_BOX = (fmpq(659, 1000), fmpq(1), fmpq(0), CAP, fmpq(0), CAP)
+# lambda_lo, lambda_hi).  INITIAL_BOX is a superset of D: the constraint
+# m + lambda <= 91/750 is imposed in restrict(), the other bounds are exact.
+INITIAL_BOX = (R_MIN, R_MAX, fmpq(0), M_PLUS_LAMBDA_CAP, fmpq(0), M_PLUS_LAMBDA_CAP)
 
 
 class Inconclusive(Exception):
@@ -71,6 +89,64 @@ class Inconclusive(Exception):
         # that carries it from a worker process back to the parent.
         super().__init__(box)
         self.box = box
+
+
+# ---------------------------------------------------------------------------
+# The quantities of the paper, at a point (r, m, lambda) of the prism
+# ---------------------------------------------------------------------------
+#
+# One function per line of the variable transformation of the reduction lemma,
+# under the normalization Opt = 1.  They are the only place where the constants
+# of the reduction appear; everything below is assembled from them, so the code
+# can be checked against the paper formula by formula instead of against a
+# hand-flattened polynomial.
+
+
+def R1_V0_eta(r, m, lam):
+    return 1 - r
+
+
+def R1_V_eta_third(r, m, lam):
+    return r - fmpq(841, 1500) + lam
+
+
+def R1_V_single(r, m, lam):
+    return fmpq(159, 500) + m + lam
+
+
+def R1_V_double(r, m, lam):
+    return fmpq(91, 375) - m - 2 * lam
+
+
+def R0_V_single(r, m, lam):
+    return fmpq(159, 250) + 2 * m + 3 * lam
+
+
+def R0_V_double(r, m, lam):
+    return fmpq(91, 125) - 4 * m - 6 * lam
+
+
+def R1_V_eta_one(r, m, lam):
+    """R_1(V_eta^1) = Opt - R_1(V_0^eta), which equals r on the prism.
+
+    The transformation is consistent: summing the three parts of V_eta^1 gives
+    R_1(V_eta^{1/3}) + R_1(V_single) + R_1(V_double) = r as well.
+    """
+    return 1 - R1_V0_eta(r, m, lam)
+
+
+def sigma_third(r, m, lam):
+    """sigma_{1/3}(V_eta^1); equals 3/2 r + 159/1000 + m on the prism."""
+    return (
+        fmpq(3, 2) * R1_V_eta_third(r, m, lam)
+        + 3 * (R1_V_single(r, m, lam) + R1_V_double(r, m, lam))
+        - fmpq(1, 2) * (R0_V_single(r, m, lam) + R0_V_double(r, m, lam))
+    )
+
+
+def Delta(r, m, lam):
+    """Delta = R_0(V_single) - R_1(V_single); equals 159/500 + m + 2 lambda."""
+    return R0_V_single(r, m, lam) - R1_V_single(r, m, lam)
 
 
 def upper_fmpq(x):
@@ -206,52 +282,86 @@ def integral_upper(p_lo, p_hi, branches):
 
 
 # ---------------------------------------------------------------------------
-# Subdivision of the parameter domain
+# Bounding and subdivision of the parameter domain
 # ---------------------------------------------------------------------------
 
 
-def upper_bound(box, target=TARGET):
-    """Certified upper bound, as an exact rational, for min{C_eta, C_1/3} on the
-    box.  The eta bound alone is returned as soon as it settles the box, since
-    the minimum of the two is bounded by either one."""
+def upper_bound(box, target=RHO_MINUS_ALPHA):
+    """Certified upper bound, as an exact rational, for
+    min{C_eta - alpha * Opt, C_1/3 - alpha * Opt} on the box.  The eta bound
+    alone is returned as soon as it settles the box, since the minimum of the
+    two is bounded by either one."""
     r_lo, r_hi, m_lo, m_hi, lam_lo, lam_hi = box
 
-    # p = R_0(V_single) = 159/250 + 2m + 3lambda.
-    p_lo = fmpq(159, 250) + 2 * m_lo + 3 * lam_lo
-    p_hi = fmpq(159, 250) + 2 * m_hi + 3 * lam_hi
+    # Every quantity of the paper is affine in (r, m, lambda) with coefficients
+    # of constant sign, so each of its extremes over the box is attained at one
+    # of the two corners below.  Which corner is stated for every use.
+    lo = (r_lo, m_lo, lam_lo)
+    hi = (r_hi, m_hi, lam_hi)
 
-    # C_eta = 5/2 - r + 2r int_0^1 min{1, (1-pt) / (2r - bt)} dt with the slope
-    # b = 2r + 2R_0(V_single) - 2R_1(V_single) = 2r + 159/250 + 2m + 4lambda.
-    eta = (2 * r_lo, 2 * r_hi + fmpq(159, 250) + 2 * m_hi + 4 * lam_hi)
-    eta_integral = integral_upper(p_lo, p_hi, [eta])
-    eta_cost = fmpq(5, 2) - r_lo + 2 * r_hi * eta_integral
-    if eta_cost < target:
-        return eta_cost
+    # p = R_0(V_single) increases in m and in lambda.
+    p_lo = R0_V_single(*lo)
+    p_hi = R0_V_single(*hi)
 
-    # C_1/3 = 3 - 3r/2 + s int_0^1 min{1, Phi^(1), Phi^(2)} dt with
-    # s = sigma_1/3(V_eta^1) = 3r/2 + 159/1000 + m, the quotients named as in
-    # README.md.  The constant term of the denominator of Phi^(2) is
-    # s - R_0(V_double)/8, with R_0(V_double) = 91/125 - 4m - 6lambda.  The
-    # branches are listed in the order in which they attain the minimum: at
-    # t = 0 the denominator of Phi^(2) is smaller by
+    # Delta = R_0(V_single) - R_1(V_single) increases in m and in lambda.  It
+    # enters only the denominator slopes, which have to be over-estimated, so
+    # only its maximum is needed.
+    delta_max = Delta(*hi)
+
+    # R_1(V_0^eta) = Opt - r decreases in r, so the lower corner maximizes it.
+    R1_V0_eta_max = R1_V0_eta(*lo)
+
+    # R_1(V_eta^1) = r increases in r.  Its minimum gives the denominator
+    # constant of the eta quotient, which has to be under-estimated; its maximum
+    # gives both the denominator slope and the factor in front of the integral,
+    # which have to be over-estimated.
+    R1_V_eta_one_min = R1_V_eta_one(*lo)
+    R1_V_eta_one_max = R1_V_eta_one(*hi)
+
+    # C_eta - alpha * Opt
+    #   = R_1(V_0^eta)
+    #     + 2 R_1(V_eta^1) int_0^1 min{1, (1 - R_0(V_single) t) / (a - b t)} dt,
+    #   a = 2 R_1(V_eta^1),   b = 2 R_1(V_eta^1) + 2 Delta.
+    branch_eta = (2 * R1_V_eta_one_min, 2 * R1_V_eta_one_max + 2 * delta_max)
+    integral_eta = integral_upper(p_lo, p_hi, [branch_eta])
+    C_hat_eta_minus_alpha = R1_V0_eta_max + 2 * R1_V_eta_one_max * integral_eta
+    if C_hat_eta_minus_alpha < target:
+        return C_hat_eta_minus_alpha
+
+    # sigma_{1/3}(V_eta^1) = 3/2 r + 159/1000 + m increases in r and in m.
+    sigma_min = sigma_third(*lo)
+    sigma_max = sigma_third(*hi)
+
+    # R_0(V_double) = 91/125 - 4m - 6 lambda *decreases* in m and in lambda, so
+    # its maximum sits at the *lower* corner.  It is subtracted in the
+    # denominator constant of Phi^(2), which therefore needs that maximum.
+    R0_double_max = R0_V_double(*lo)
+
+    # C_1/3 - alpha * Opt
+    #   = 3/2 R_1(V_0^eta)
+    #     + sigma int_0^1 min{1, Phi^(1), Phi^(2)} dt,
+    #   Phi^(1): a = sigma,                      b = sigma + 2 Delta,
+    #   Phi^(2): a = sigma - R_0(V_double) / 8,  b = sigma + 3/2 Delta.
+    # The branches are listed in the order in which they attain the minimum: at
+    # t = 0 the denominator of Phi^(2) is smaller by R_0(V_double)/8 =
     # 91/1000 - m/2 - 3lambda/4 >= 0 on D (since m/2 + 3lambda/4 <=
     # 3(m + lambda)/4 <= 91/1000), and it decreases more slowly, by
-    # 159/1000 + m/2 + lambda per unit of t, so the two swap exactly once.
-    s_lo = fmpq(3, 2) * r_lo + fmpq(159, 1000) + m_lo
-    s_hi = fmpq(3, 2) * r_hi + fmpq(159, 1000) + m_hi
-    branches = [
+    # Delta/2 = 159/1000 + m/2 + lambda per unit of t, so the two swap exactly
+    # once.
+    branches_third = [
         # Phi^(1)
-        (s_lo, fmpq(3, 2) * r_hi + fmpq(159, 200) + 3 * m_hi + 4 * lam_hi),
+        (sigma_min, sigma_max + 2 * delta_max),
         # Phi^(2)
-        (
-            fmpq(3, 2) * r_lo + fmpq(17, 250) + fmpq(3, 2) * m_lo + fmpq(3, 4) * lam_lo,
-            fmpq(3, 2) * r_hi + fmpq(159, 250) + fmpq(5, 2) * m_hi + 3 * lam_hi,
-        ),
+        (sigma_min - R0_double_max / 8, sigma_max + fmpq(3, 2) * delta_max),
     ]
-    one_third_integral = integral_upper(p_lo, p_hi, branches)
-    one_third_cost = 3 - fmpq(3, 2) * r_lo + s_hi * one_third_integral
+    integral_third = integral_upper(p_lo, p_hi, branches_third)
+    C_hat_third_minus_alpha = (
+        fmpq(3, 2) * R1_V0_eta_max + sigma_max * integral_third
+    )
 
-    return one_third_cost if one_third_cost < eta_cost else eta_cost
+    if C_hat_third_minus_alpha < C_hat_eta_minus_alpha:
+        return C_hat_third_minus_alpha
+    return C_hat_eta_minus_alpha
 
 
 def restrict(box):
@@ -262,25 +372,25 @@ def restrict(box):
 
     # Every point of the box violates the constraint if already the smallest
     # sum in it exceeds 91/750.
-    if m_lo + lam_lo > CAP:
+    if m_lo + lam_lo > M_PLUS_LAMBDA_CAP:
         return None
 
     # Every feasible point of the box has m <= 91/750 - lambda_lo and
     # lambda <= 91/750 - m_lo, so these two contractions keep the whole
     # intersection of the box with D.  Neither can fall below the corresponding
     # lower endpoint, because m_lo + lambda_lo <= 91/750 was just checked.
-    m_cap = CAP - lam_lo
+    m_cap = M_PLUS_LAMBDA_CAP - lam_lo
     if m_cap < m_hi:
         m_hi = m_cap
-    lam_cap = CAP - m_lo
+    lam_cap = M_PLUS_LAMBDA_CAP - m_lo
     if lam_cap < lam_hi:
         lam_hi = lam_cap
     return (r_lo, r_hi, m_lo, m_hi, lam_lo, lam_hi)
 
 
 # Reciprocals of the extents of D: 341/1000 in r, 91/750 in m and lambda.
-_R_SCALE = fmpq(1000, 341)
-_ML_SCALE = fmpq(750, 91)
+_R_SCALE = 1 / (R_MAX - R_MIN)
+_ML_SCALE = 1 / M_PLUS_LAMBDA_CAP
 
 
 def split(box):
@@ -314,9 +424,10 @@ def split(box):
 
 
 def prove(box):
-    """Proves that min{C_eta, C_1/3} < TARGET on the whole intersection of `box`
-    with D.  Returns (largest certified bound or None, boxes visited, maximum
-    depth reached); raises Inconclusive if some sub-box could not be settled.
+    """Proves that min{C_eta - alpha * Opt, C_1/3 - alpha * Opt} <
+    RHO_MINUS_ALPHA on the whole intersection of `box` with D.  Returns
+    (largest certified bound or None, boxes visited, maximum depth reached);
+    raises Inconclusive if some sub-box could not be settled.
 
     The traversal keeps an explicit stack of (box, depth).  Its invariant is
     that the union of the stacked boxes together with the already accepted ones
@@ -337,7 +448,7 @@ def prove(box):
         if depth > max_depth:
             max_depth = depth
         bound = upper_bound(current)
-        if bound < TARGET:
+        if bound < RHO_MINUS_ALPHA:
             if best is None or bound > best:
                 best = bound
             continue
@@ -416,12 +527,13 @@ def main():
     bounds = [bound for bound, _, _ in results if bound is not None]
     assert bounds, "no box intersected D"
     bound = max(bounds)
-    assert bound < TARGET, "accepted a bound that is not below the target"
+    assert bound < RHO_MINUS_ALPHA, "accepted a bound that is not below the target"
 
     boxes = sum(visited for _, visited, _ in results)
     depth = max(d for _, _, d in results)
     print(
-        "PROVED: max min{C_eta, C_1/3} <= %s < %s" % (decimal_upper(bound), TARGET)
+        "PROVED: max min{C_eta - alpha, C_1/3 - alpha} <= %s < %s"
+        % (decimal_upper(bound), RHO_MINUS_ALPHA)
     )
     print(
         "boxes: %d, max depth: %d, jobs: %d, elapsed: %.1fs"

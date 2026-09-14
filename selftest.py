@@ -8,23 +8,30 @@ botched antiderivative.  This file checks exactly that, by comparing verify.py
 against independently written, deliberately naive implementations:
 
   check_domain          that the searched region covers D and the target is
-                        3159/1000, both spelled out again independently;
+                        1659/1000, both spelled out again independently;
   check_upper_fmpq      the one function that turns an Arb ball back into a
                         number, against the ball's own endpoints;
   check_antiderivative  the closed form of the branch integral, against a
                         rigorous interval Riemann sum that uses no
                         antiderivative at all;
+  check_monotonicity    that the corners at which verify.upper_bound evaluates
+                        the quantities of the paper really do bracket their
+                        values everywhere in the box;
   check_box_bound       the whole per-box bound, against a plain-float
                         re-transcription of the coefficients documented in
                         README.md -- this is what catches a mistyped constant
                         or a swapped box endpoint, in either direction;
   check_upper_bound     the defining property, that the per-box bound really is
-                        above min{C_eta, C_1/3} at points of the box, against a
-                        naive Riemann sum of the envelope that shares no
-                        structure with verify.py;
+                        above min{C_eta - alpha, C_1/3 - alpha} at points of the
+                        box, against a naive Riemann sum of the envelope that
+                        shares no structure with verify.py;
   check_partition       that the task boxes handed to the worker processes tile
                         the initial box, which is what makes the parallel run
                         equivalent to a serial one.
+
+Everything here works with the alpha-free cost bounds C_eta - alpha * Opt and
+C_1/3 - alpha * Opt that verify.py certifies; see its module docstring for why
+alpha cancels.
 
 Nothing in verify.py depends on this file: reviewing the upper-bound proof means
 reading verify.py alone.
@@ -45,31 +52,31 @@ ctx.prec = 128
 
 # The domain D of the reduction lemma, written out here independently of
 # verify.py.
-R_MIN, R_MAX, SUM_MAX = fmpq(659, 1000), fmpq(1), fmpq(91, 750)
+R_MIN, R_MAX, M_PLUS_LAMBDA_MAX = fmpq(659, 1000), fmpq(1), fmpq(91, 750)
 
 
 def sample_point(rng):
     """A random point (r, m, lambda) of D, as exact rationals."""
     r = R_MIN + (R_MAX - R_MIN) * fmpq(rng.randrange(0, 5001), 5000)
-    m = SUM_MAX * fmpq(rng.randrange(0, 1201), 1200)
-    lam = (SUM_MAX - m) * fmpq(rng.randrange(0, 1201), 1200)
-    assert R_MIN <= r <= R_MAX and m >= 0 and lam >= 0 and m + lam <= SUM_MAX
+    m = M_PLUS_LAMBDA_MAX * fmpq(rng.randrange(0, 1201), 1200)
+    lam = (M_PLUS_LAMBDA_MAX - m) * fmpq(rng.randrange(0, 1201), 1200)
+    assert R_MIN <= r <= R_MAX and m >= 0 and lam >= 0 and m + lam <= M_PLUS_LAMBDA_MAX
     return r, m, lam
 
 
 # ---------------------------------------------------------------------------
-# Check 0: the domain is the one of the lemma, and the target is 3.159
+# Check 0: the domain is the one of the lemma, and the target is 1.659
 # ---------------------------------------------------------------------------
 
 
 def check_domain(samples=2000, seed=20260907):
     """The searched region must cover D = {659/1000 <= r <= 1, m, lambda >= 0,
-    m + lambda <= 91/750} and the target must be 3159/1000."""
-    assert verify.TARGET == fmpq(3159, 1000), "wrong target"
+    m + lambda <= 91/750} and the target must be rho - alpha = 1659/1000."""
+    assert verify.RHO_MINUS_ALPHA == fmpq(1659, 1000), "wrong target"
     assert verify.INITIAL_BOX[0] <= R_MIN and verify.INITIAL_BOX[1] >= R_MAX, "r range"
     assert verify.INITIAL_BOX[2] <= 0 and verify.INITIAL_BOX[4] <= 0, "m, lambda start above 0"
-    assert (verify.INITIAL_BOX[3] >= SUM_MAX
-            and verify.INITIAL_BOX[5] >= SUM_MAX), "m, lambda stop below 91/750"
+    assert (verify.INITIAL_BOX[3] >= M_PLUS_LAMBDA_MAX
+            and verify.INITIAL_BOX[5] >= M_PLUS_LAMBDA_MAX), "m, lambda stop below 91/750"
 
     # restrict() may only remove points that are outside D: every point of D
     # that lies in a box must still lie in the restricted box.
@@ -85,7 +92,7 @@ def check_domain(samples=2000, seed=20260907):
             "restrict() cut away a point of D: r=%s m=%s lambda=%s -> %s"
             % (r, m, lam, box)
         )
-    print("ok  domain: target 3159/1000, %d boxes keep their points of D" % samples)
+    print("ok  domain: target 1659/1000, %d boxes keep their points of D" % samples)
 
 
 # ---------------------------------------------------------------------------
@@ -184,7 +191,89 @@ def check_antiderivative(samples=60, seed=20260907):
 
 
 # ---------------------------------------------------------------------------
-# Check 3: the coefficients, re-transcribed from README.md in plain floats
+# Check 3: the corners at which the paper's quantities are evaluated
+# ---------------------------------------------------------------------------
+#
+# verify.upper_bound assembles its branch data from R_0, R_1, sigma_{1/3} and
+# Delta, each evaluated at one corner of the box, chosen by the sign of its
+# coefficients.  Getting a sign wrong would silently *under*-estimate the true
+# bound, which no other check here would notice, so the bracketing is checked
+# directly: at any point of the box, the numerator coefficient must lie between
+# p_lo and p_hi, every denominator constant must be at least a_lo, and every
+# denominator slope at most b_hi.
+#
+# This check shares verify.py's formulas on purpose -- what it tests is the
+# choice of corner, not the constants, which check_box_bound covers.
+
+
+def box_branch_data(box):
+    """The corner choices of verify.upper_bound, re-derived here."""
+    r_lo, r_hi, m_lo, m_hi, lam_lo, lam_hi = box
+    lo, hi = (r_lo, m_lo, lam_lo), (r_hi, m_hi, lam_hi)
+
+    p_lo, p_hi = verify.R0_V_single(*lo), verify.R0_V_single(*hi)
+    delta_max = verify.Delta(*hi)
+    sigma_min, sigma_max = verify.sigma_third(*lo), verify.sigma_third(*hi)
+    R0_double_max = verify.R0_V_double(*lo)
+    branches = [
+        # C_eta
+        (2 * verify.R1_V_eta_one(*lo), 2 * verify.R1_V_eta_one(*hi) + 2 * delta_max),
+        # Phi^(1)
+        (sigma_min, sigma_max + 2 * delta_max),
+        # Phi^(2)
+        (sigma_min - R0_double_max / 8, sigma_max + fmpq(3, 2) * delta_max),
+    ]
+    return p_lo, p_hi, sigma_max, verify.R1_V0_eta(*lo), branches
+
+
+def point_branch_data(r, m, lam):
+    """The exact branch data at a single point -- no relaxation at all."""
+    delta = verify.Delta(r, m, lam)
+    sigma = verify.sigma_third(r, m, lam)
+    eta_one = verify.R1_V_eta_one(r, m, lam)
+    branches = [
+        (2 * eta_one, 2 * eta_one + 2 * delta),
+        (sigma, sigma + 2 * delta),
+        (sigma - verify.R0_V_double(r, m, lam) / 8, sigma + fmpq(3, 2) * delta),
+    ]
+    return verify.R0_V_single(r, m, lam), sigma, verify.R1_V0_eta(r, m, lam), branches
+
+
+def check_monotonicity(boxes=400, points=25, seed=20260907):
+    """Every point of a box must be bracketed by the box's branch data."""
+    rng = random.Random(seed)
+    names = ("C_eta", "Phi^(1)", "Phi^(2)")
+    checked = 0
+    for _ in range(boxes):
+        r, m, lam = sample_point(rng)
+        width = fmpq(1, 2 ** rng.randrange(1, 12))
+        box = verify.restrict((r, r + width, m, m + width, lam, lam + width))
+        if box is None:
+            continue
+        p_lo, p_hi, sigma_max, R1_V0_eta_max, branches = box_branch_data(box)
+
+        for _ in range(points):
+            point = tuple(
+                box[2 * i] + (box[2 * i + 1] - box[2 * i])
+                * fmpq(rng.randrange(0, 1001), 1000)
+                for i in range(3)
+            )
+            p, sigma, R1_V0_eta, point_branches = point_branch_data(*point)
+            assert p_lo <= p <= p_hi, "R_0(V_single) escapes [p_lo, p_hi] at %s" % (point,)
+            assert sigma <= sigma_max, "sigma_{1/3} exceeds its box maximum at %s" % (point,)
+            assert R1_V0_eta <= R1_V0_eta_max, (
+                "R_1(V_0^eta) exceeds its box maximum at %s" % (point,))
+            for name, (a_lo, b_hi), (a, b) in zip(names, branches, point_branches):
+                assert a >= a_lo, "%s: denominator constant below a_lo at %s" % (name, point)
+                assert b <= b_hi, "%s: denominator slope above b_hi at %s" % (name, point)
+            checked += 1
+
+    assert checked, "no box survived restrict()"
+    print("ok  monotonicity: %d points bracketed by their box" % checked)
+
+
+# ---------------------------------------------------------------------------
+# Check 4: the coefficients, re-transcribed from README.md in plain floats
 # ---------------------------------------------------------------------------
 #
 # This mirrors the *algorithm* of verify.py deliberately -- it is a differential
@@ -192,6 +281,11 @@ def check_antiderivative(samples=60, seed=20260907):
 # display in README.md, and every choice of box endpoint follows the rule stated
 # there: the bounding quotient uses the smallest numerator coefficient p_lo, the
 # smallest denominator constant a_lo and the largest denominator slope b_hi.
+#
+# verify.py assembles these coefficients from R_0, R_1, sigma_{1/3} and Delta,
+# whereas the literals below are the flattened polynomials.  The two are
+# therefore genuinely independent derivations of the same numbers, and any
+# discrepancy between the paper's formulas and the flattened form shows up here.
 
 
 def float_integral_upper(p_lo, p_hi, branches):
@@ -227,7 +321,8 @@ def float_integral_upper(p_lo, p_hi, branches):
 
 
 def float_upper_bound(box):
-    """min{C_eta, C_1/3} bound for a box, in plain floats, from README.md."""
+    """min{C_eta - alpha, C_1/3 - alpha} bound for a box, in plain floats, from
+    README.md."""
     r_lo, r_hi, m_lo, m_hi, lam_lo, lam_hi = (float(x) for x in box)
 
     # p = R_0(V_single) = 159/250 + 2m + 3 lambda
@@ -235,18 +330,22 @@ def float_upper_bound(box):
     p_hi = 159 / 250 + 2 * m_hi + 3 * lam_hi
 
     eta = (2 * r_lo, 2 * r_hi + 159 / 250 + 2 * m_hi + 4 * lam_hi)
-    eta_cost = 5 / 2 - r_lo + 2 * r_hi * float_integral_upper(p_lo, p_hi, [eta])
+    C_hat_eta_minus_alpha = (
+        1 - r_lo + 2 * r_hi * float_integral_upper(p_lo, p_hi, [eta])
+    )
 
-    s_lo = 3 / 2 * r_lo + 159 / 1000 + m_lo
-    s_hi = 3 / 2 * r_hi + 159 / 1000 + m_hi
+    sigma_lo = 3 / 2 * r_lo + 159 / 1000 + m_lo
+    sigma_hi = 3 / 2 * r_hi + 159 / 1000 + m_hi
     branches = [
-        (s_lo, 3 / 2 * r_hi + 159 / 200 + 3 * m_hi + 4 * lam_hi),
+        (sigma_lo, 3 / 2 * r_hi + 159 / 200 + 3 * m_hi + 4 * lam_hi),
         (3 / 2 * r_lo + 17 / 250 + 3 / 2 * m_lo + 3 / 4 * lam_lo,
          3 / 2 * r_hi + 159 / 250 + 5 / 2 * m_hi + 3 * lam_hi),
     ]
-    one_third_cost = 3 - 3 / 2 * r_lo + s_hi * float_integral_upper(p_lo, p_hi, branches)
+    C_hat_third_minus_alpha = (
+        3 / 2 - 3 / 2 * r_lo + sigma_hi * float_integral_upper(p_lo, p_hi, branches)
+    )
 
-    return min(eta_cost, one_third_cost)
+    return min(C_hat_eta_minus_alpha, C_hat_third_minus_alpha)
 
 
 def check_box_bound(samples=400, seed=20260907):
@@ -282,7 +381,7 @@ def check_box_bound(samples=400, seed=20260907):
 
 
 # ---------------------------------------------------------------------------
-# Check 4: the bound really is an upper bound for the envelope
+# Check 5: the bound really is an upper bound for the envelope
 # ---------------------------------------------------------------------------
 #
 # Here nothing is shared with verify.py: the two cost functions are evaluated by
@@ -310,15 +409,15 @@ def envelope_integral(quotients, pieces):
     return total / pieces
 
 
-def cost_eta(r, m, lam, pieces=100000):
-    """C_eta as displayed in README.md."""
+def C_hat_eta_minus_alpha(r, m, lam, pieces=100000):
+    """C_eta - alpha * Opt as displayed in README.md."""
     p = 159 / 250 + 2 * m + 3 * lam
     quotients = [(p, 2 * r, 2 * r + 159 / 250 + 2 * m + 4 * lam)]
-    return 5 / 2 - r + 2 * r * envelope_integral(quotients, pieces)
+    return 1 - r + 2 * r * envelope_integral(quotients, pieces)
 
 
-def cost_one_third(r, m, lam, pieces=100000):
-    """C_1/3 as displayed in README.md."""
+def C_hat_third_minus_alpha(r, m, lam, pieces=100000):
+    """C_1/3 - alpha * Opt as displayed in README.md."""
     p = 159 / 250 + 2 * m + 3 * lam
     quotients = [
         (p, 3 / 2 * r + 159 / 1000 + m,
@@ -326,13 +425,15 @@ def cost_one_third(r, m, lam, pieces=100000):
         (p, 3 / 2 * r + 17 / 250 + 3 / 2 * m + 3 / 4 * lam,
          3 / 2 * r + 159 / 250 + 5 / 2 * m + 3 * lam),
     ]
-    return 3 - 3 / 2 * r + (3 / 2 * r + 159 / 1000 + m) * envelope_integral(quotients, pieces)
+    return (3 / 2 - 3 / 2 * r
+            + (3 / 2 * r + 159 / 1000 + m) * envelope_integral(quotients, pieces))
 
 
 def check_upper_bound(samples=60, seed=20260907):
     """For a box and a point inside it, verify.upper_bound(box) must be at least
-    min{C_eta, C_1/3} at that point -- with the real target as well as without
-    the early return.  The Riemann sum is accurate to about 1e-5."""
+    min{C_eta - alpha, C_1/3 - alpha} at that point -- with the real target as
+    well as without the early return.  The Riemann sum is accurate to about
+    1e-5."""
     rng = random.Random(seed)
     tolerance = 1e-5
     worst = float("inf")
@@ -343,9 +444,9 @@ def check_upper_bound(samples=60, seed=20260907):
         if box is None or box[0] < verify.INITIAL_BOX[0]:
             continue
 
-        point = min(cost_eta(float(r), float(m), float(lam)),
-                    cost_one_third(float(r), float(m), float(lam)))
-        for target in (verify.TARGET, fmpq(-1)):
+        point = min(C_hat_eta_minus_alpha(float(r), float(m), float(lam)),
+                    C_hat_third_minus_alpha(float(r), float(m), float(lam)))
+        for target in (verify.RHO_MINUS_ALPHA, fmpq(-1)):
             bound = float(verify.upper_bound(box, target))
             assert bound >= point - tolerance, (
                 "bound is below the envelope at an interior point: r=%s m=%s "
@@ -360,7 +461,7 @@ def check_upper_bound(samples=60, seed=20260907):
 
 
 # ---------------------------------------------------------------------------
-# Check 5: the decomposition the parallel run relies on
+# Check 6: the decomposition the parallel run relies on
 # ---------------------------------------------------------------------------
 
 
@@ -406,6 +507,7 @@ def main():
     check_domain()
     check_upper_fmpq()
     check_antiderivative()
+    check_monotonicity()
     check_box_bound()
     check_upper_bound()
     check_partition()

@@ -1,152 +1,160 @@
-# Computational certificate for the reduction to a three-dimensional prism
+# Interval Arithmetic for the 3.159-approximation for CVRP
 
-This directory contains a rigorous, reproducible proof of the hypothesis of the
-lemma "Reduction to a three-dimensional prism": with
-\(\rho=\frac{3159}{1000}=3.159\),
-\[
-\max_{(r,m,\lambda)\in\mathcal D}
-\min\{\widehat C_\eta(r,m,\lambda),\widehat C_{1/3}(r,m,\lambda)\}<\rho
-\]
-on the triangular prism
-\[
-\mathcal D=\left\{(r,m,\lambda):
-\frac{659}{1000}\le r\le1,\quad m,\lambda\ge0,\quad
-m+\lambda\le\frac{91}{750}\right\}.
-\]
+This repository contains a python script to check the conditions of the lemma
+"Reduction to a three-dimensional prism" in the paper. This is implemented in
+`verify.py`. Every computation is done using rational arithmetic, except for
+the logarithm, which is done using Arb balls to rule out rounding errors.
+The file `selftest.py` only does redundant checks to catch
+implementation bugs, and is not part of the certificate.
 
-- `verify.py` is the proof. It is standalone: no file other than `verify.py`
-  has to be read in order to check it.
-- `selftest.py` cross-checks the transcription of the formulas in `verify.py`.
-- `visualize_search_space.py` plots the search space; it has not been updated
-  to this reduction yet (see the last section).
 
-## The reduction
+## Problem statement
 
-After the normalization \(\mathrm{OPT}=1\), the cost bounds are evaluated with
-\[
-\begin{array}{rclcrcl}
-R_1(V_0^\eta)&=&1-r,
-&&R_1(V_\eta^{1/3})&=&r-\frac{841}{1500}+\lambda,\\
-R_1(V_{\mathrm{single}})&=&\frac{159}{500}+m+\lambda,
-&&R_1(V_{\mathrm{double}})&=&\frac{91}{375}-m-2\lambda,\\
-R_0(V_{\mathrm{single}})&=&\frac{159}{250}+2m+3\lambda,
-&&R_0(V_{\mathrm{double}})&=&\frac{91}{125}-4m-6\lambda.
-\end{array}
-\]
-Hence \(R_1(V_\eta^1)=1-R_1(V_0^\eta)=r\) and
-\[
-\begin{aligned}
-\sigma_{1/3}(V_\eta^1)
-&=\frac32R_1(V_\eta^{1/3})
- +3\bigl(R_1(V_{\mathrm{single}})+R_1(V_{\mathrm{double}})\bigr)
- -\frac12\bigl(R_0(V_{\mathrm{single}})+R_0(V_{\mathrm{double}})\bigr)\\
-&=\frac32r+\frac{159}{1000}+m.
-\end{aligned}
-\]
+We prove
 
-## Functions checked
+```
+For every (r, m, λ) satisfying
 
-With \(\alpha=\frac32\) and the substitution \(x=2R_1(V_\eta^1)\,t=2rt\), the
-definition of \(\widehat C_\eta\) reads
-\[
-\widehat C_\eta
-=\alpha+R_1(V_0^\eta)+2r\int_0^1\min\left\{1,
-\frac{1-R_0(V_{\mathrm{single}})\,t}
-{2r-\bigl(2r+2R_0(V_{\mathrm{single}})-2R_1(V_{\mathrm{single}})\bigr)t}
-\right\}dt .
-\]
-Likewise, with \(\sigma=\sigma_{1/3}(V_\eta^1)\), the substitution
-\(t=s/\sigma\) and \(\Delta=R_0(V_{\mathrm{single}})-R_1(V_{\mathrm{single}})\),
-the two cost density functions are
-\[
-\Phi^{(1)}=\frac{1-R_0(V_{\mathrm{single}})\,t}{(1-t)\sigma-2t\Delta},
-\qquad
-\Phi^{(2)}=\frac{1-R_0(V_{\mathrm{single}})\,t}
-{(1-t)\sigma-\frac32t\Delta-\frac18R_0(V_{\mathrm{double}})},
-\]
-and
-\[
-\widehat C_{1/3}
-=\alpha+\frac32R_1(V_0^\eta)
-+\sigma\int_0^1\min\bigl\{\Phi^{(1)},\Phi^{(2)},1\bigr\}\,dt .
-\]
-Substituting the values above gives the two expressions that `verify.py`
-checks:
-\[
-\begin{aligned}
-\widehat C_\eta(r,m,\lambda)
-={}&\frac52-r+2r\int_0^1\min\left\{1,
-\frac{1-(\frac{159}{250}+2m+3\lambda)t}
-{2r-(2r+\frac{159}{250}+2m+4\lambda)t}\right\}\,dt,
-\\
-\widehat C_{1/3}(r,m,\lambda)
-={}&3-\frac32r+\left(\frac32r+\frac{159}{1000}+m\right)
-\int_0^1\min\left\{1,
-\frac{1-(\frac{159}{250}+2m+3\lambda)t}
-{\frac32r+\frac{159}{1000}+m
- -(\frac32r+\frac{159}{200}+3m+4\lambda)t},
-\right.\\[-2mm]
-&\hspace{57mm}\left.
-\frac{1-(\frac{159}{250}+2m+3\lambda)t}
-{\frac32r+\frac{17}{250}+\frac32m+\frac34\lambda
- -(\frac32r+\frac{159}{250}+\frac52m+3\lambda)t}
-\right\}\,dt.
-\end{aligned}
-\]
-As stipulated in the paper, a fraction is treated as infinity when it becomes
-negative. Since the pointwise minimum already contains the constant branch
-\(1\), the implementation equivalently represents an inadmissible quotient
-branch by \(1\). A quotient is evaluated only where its numerator and
-denominator are positive.
+    659/1000 ≤ r ≤ 1        m ≥ 0        λ ≥ 0        m + λ ≤ 91/750
 
-## The rigorous certificate: `verify.py`
+it holds that
 
-On a parameter box, each quotient has the form
-\[
-q(t)=\frac{1-pt}{a-bt}.
-\]
-If \(p\ge p_-\), \(a\ge a_-\) and \(b\le b_+\) throughout the box, then,
-wherever \(1-p_+t>0\) and \(a_--b_+t>0\),
-\[
-q(t)\le \frac{1-p_-t}{a_--b_+t},
-\]
-and this upper function is integrated in closed form,
-\[
-\int_l^r\frac{1-pt}{a-bt}\,dt
-=\frac pb(r-l)+\frac{b-ap}{b^2}
-  \log\!\left(\frac{a-bl}{a-br}\right).
-\]
-The interval \([0,1]\) is cut where consecutive quotients swap and where the
-last one meets the constant \(1\); on each segment the bound uses the quotient
-that attains the minimum there, or \(1\). The domain \(\mathcal D\) is covered
-by adaptive bisection, and a box is accepted as soon as its bound is below
-\(\rho\).
+    min{ Ĉ_η(r, m, λ) − α·Opt ,  Ĉ_1/3(r, m, λ) − α·Opt }  <  1659/1000 .
+```
 
-Every coefficient of the problem is an affine function, with rational
-coefficients, of the endpoints of the parameter box, and bisecting a rational
-interval yields rational endpoints. So `verify.py` keeps the box endpoints, the
-branch data \(p_-,a_-,b_+\), the cut points and the constraint
-\(m+\lambda\le91/750\) as **exact rationals**
-([python-flint](https://github.com/flintlib/python-flint)'s `fmpq`); every
-decision the search makes -- branch admissibility, acceptance of a box, the
-final comparison against \(\rho=3159/1000\) -- is an exact rational comparison,
-with no rounding to analyse. The only quantity that is not rational is the
-logarithm in the closed form above; it alone is evaluated in Arb ball
-arithmetic (`flint.arb`, rigorous by construction) and its ball upper endpoint
-is converted back to an exact rational. The whole numerical-soundness argument
-is therefore confined to the functions `upper_fmpq` and `segment_upper_bound`.
-Because the target is an exact rational and each box bound is compared against
-it with a strict `<`, no rounding of the target has to be considered.
+Here `Ĉ_η` and `Ĉ_1/3` are the two cost bounds of the paper (see definitions below),
+evaluated on an instance normalised to `Opt = 1` under the variable substitution
+of the reduction lemma (Section 4). Because the target of the lemma is `ρ = α + 1.659`, this *is* the lemma's
+hypothesis
 
-Parallelism is a static decomposition: the initial box is bisected into
-\(2^{12}\) task boxes whose union is exactly the initial box, and each task is
-proved independently in a worker process by the pure function `prove`. Running
-with `--jobs 1` performs the identical computation in one process.
+```
+    min{ Ĉ_η , Ĉ_1/3 }  <  ρ        on the prism.
+```
+
+
+### Notation
+
+We need the following notation from the paper
+
+| symbol | meaning |
+| --- | --- |
+| `Opt` | cost of an optimal solution. The instance is scaled so that `Opt = 1`. |
+| `α` | the approximation ratio for TSP |
+| `ρ = α + 1.659` | the target of the lemma. |
+| `R₁(·)`, `R₀(·)` | the two quantities of the paper's variable list, on a set of customers. |
+| `V_0^η`, `V_η^{1/3}`, `V_single`, `V_double` | the customer sets the substitution is stated for. |
+| `V_η¹` | the customer set the integrals run over; `R₁(V_η¹) = Opt − R₁(V_0^η)`. |
+| `σ_1/3(V_η¹)` | the `1/3`-potential of `V_η¹`. Abbreviated `σ` below. |
+| `Δ` | shorthand used here for `R₀(V_single) − R₁(V_single)`. |
+| `r`, `m`, `λ` | the three coordinates of the prism. |
+| `Ĉ_η`, `Ĉ_1/3` | the two cost bounds, with their error terms omitted. |
+
+### The cost bound `Ĉ_η`
+
+```
+Ĉ_η  =  α·Opt  +  R₁(V_0^η)  +  ∫₀^{2·R₁(V_η¹)} min{ 1 , N(s) / D(s) } ds
+
+    N(s) =  Opt  −  ( R₀(V_single) / (2·R₁(V_η¹)) ) · s
+
+    D(s) =  2·R₁(V_η¹)  −  ( 1 + ( 2·R₀(V_single) − 2·R₁(V_single) ) / (2·R₁(V_η¹)) ) · s
+```
+
+Substituting `s = 2·R₁(V_η¹)·t` maps the integral onto `[0, 1]` and clears the
+nested fractions. With `Δ = R₀(V_single) − R₁(V_single)`:
+
+```
+Ĉ_η  =  α·Opt  +  R₁(V_0^η)  +  2·R₁(V_η¹) · ∫₀¹ min{ 1 , q_η(t) } dt
+
+                        Opt − R₀(V_single)·t
+        q_η(t)  =  ──────────────────────────────────
+                    2R₁(V_η¹) − (2R₁(V_η¹) + 2Δ)·t
+```
+
+### The cost bound `Ĉ_1/3`
+
+```
+Ĉ_1/3  =  α·Opt  +  (3/2)·R₁(V_0^η)  +  ∫₀^σ min{ Φ⁽¹⁾ , Φ⁽²⁾ , 1 } ds ,    σ = σ_1/3(V_η¹)
+```
+
+where, with `t = s / σ`, the two cost density functions are
+
+```
+             Opt − R₀(V_single)·t                          Opt − R₀(V_single)·t
+Φ⁽¹⁾ = ─────────────────────────────       Φ⁽²⁾ = ───────────────────────────────────────────────
+         (1 − t)·σ  −  2·t·Δ                        (1 − t)·σ  −  (3/2)·t·Δ  −  (1/8)·R₀(V_double)
+```
+
+The same substitution `t = s/σ` maps this integral onto `[0, 1]` as well:
+
+```
+Ĉ_1/3  =  α·Opt  +  (3/2)·R₁(V_0^η)  +  σ · ∫₀¹ min{ Φ⁽¹⁾ , Φ⁽²⁾ , 1 } dt
+```
+
+### The potential `σ_1/3(V_η^1)`
+
+```
+σ_1/3(V_η¹) = (3/2)·R₁(V_η^{1/3}) + 3·( R₁(V_single) + R₁(V_double) )
+                                  − (1/2)·( R₀(V_single) + R₀(V_double) )
+```
+
+### The prism and the variable substitution
+
+The lemma's region is the triangular prism
+
+```
+    659/1000 ≤ r ≤ 1        m ≥ 0        λ ≥ 0        m + λ ≤ 91/750
+```
+
+on which the cost bounds are evaluated with (after the normalisation `Opt = 1`)
+
+| quantity | value on the prism |
+| --- | --- |
+| `R₁(V_0^η)` | `1 − r` |
+| `R₁(V_η^{1/3})` | `r − 841/1500 + λ` |
+| `R₁(V_single)` | `159/500 + m + λ` |
+| `R₁(V_double)` | `91/375 − m − 2λ` |
+| `R₀(V_single)` | `159/250 + 2m + 3λ` |
+| `R₀(V_double)` | `91/125 − 4m − 6λ` |
+
+The three quantities that the cost bounds need on top of these follow:
+
+| derived quantity | definition | value on the prism |
+| --- | --- | --- |
+| `R₁(V_η¹)` | `Opt − R₁(V_0^η)` | `r` |
+| `Δ` | `R₀(V_single) − R₁(V_single)` | `159/500 + m + 2λ` |
+| `σ = σ_1/3(V_η¹)` | see 3.3 | `(3/2)·r + 159/1000 + m` |
+
+
+
+### Quotient conventions
+
+Every one of the three quotients above has the shape `(1 − p·t) / (a − b·t)`
+once `Opt = 1`. Collecting the `t` terms of the denominators:
+
+```
+(1 − t)·σ − 2·t·Δ                              =  σ                     −  ( σ + 2Δ )·t
+(1 − t)·σ − (3/2)·t·Δ − R₀(V_double)/8         =  σ − R₀(V_double)/8    −  ( σ + (3/2)Δ )·t
+```
+
+so the three branches are
+
+| branch | `p` (numerator slope) | `a` (denominator constant) | `b` (denominator slope) |
+| --- | --- | --- | --- |
+| `Ĉ_η` | `R₀(V_single)` | `2·R₁(V_η¹)` | `2·R₁(V_η¹) + 2Δ` |
+| `Φ⁽¹⁾` | `R₀(V_single)` | `σ` | `σ + 2Δ` |
+| `Φ⁽²⁾` | `R₀(V_single)` | `σ − R₀(V_double)/8` | `σ + (3/2)·Δ` |
+
+As stipulated in the paper, a fraction is treated as `+∞` whenever its
+denominator is non-positive. Since the pointwise minimum already contains the
+constant branch `1`, the implementation equivalently represents an inadmissible
+quotient by `1`.
+
+## 8. Running it
 
 ```bash
-source /path/to/venv/bin/activate     # provides python-flint
+source /path/to/venv/bin/activate     # provides python-flint; $VENV in the dev container
 python3 verify.py                     # ~80 s on 14 threads
-python3 verify.py --jobs 1            # same result, one process, ~3 min
+python3 verify.py --jobs 1            # same result, one process, ~3.5 min
 ```
 
 Exit status is `0` when the bound is proved and `2` when a box could not be
@@ -155,42 +163,7 @@ to run under `python3 -O`, because it relies on its assertions. A reference run
 reports
 
 ```
-PROVED: max min{C_eta, C_1/3} <= 3.158999999711591 < 3159/1000
-boxes: 5582748, max depth: 25, jobs: 14, elapsed: 80.4s
+PROVED: max min{C_eta - alpha, C_1/3 - alpha} <= 1.658999999711591 < 1659/1000
+boxes: 5582748, max depth: 25, jobs: 14, elapsed: 82.3s
 ```
 
-## Cross-checks: `selftest.py`
-
-`selftest.py` cross-checks `verify.py` against independently written,
-deliberately naive implementations -- the closed-form antiderivative against a
-rigorous interval Riemann sum, the per-box bound against a plain-float
-re-transcription of the formulas above, the bound itself against a naive
-Riemann sum of the envelope at interior points, and the task decomposition
-against the domain \(\mathcal D\). It is a test of the transcription, not part
-of the proof, and `verify.py` does not refer to it:
-
-```bash
-python3 selftest.py
-```
-
-## Visualizing fixed-r slices (not yet updated)
-
-`visualize_search_space.py` evaluates \(\min\{\widehat C_\eta,\widehat C_{1/3}\}\)
-on a triangular grid in \((m,\lambda)\) for several fixed values of \(r\). It
-writes one heatmap per slice and one combined multi-panel picture to `figures/`
-next to the script:
-
-```bash
-python3 visualize_search_space.py
-python3 visualize_search_space.py --r-values 0.75 0.82 0.86 0.95 --grid-size 1001
-```
-
-The color shows \(\min\{\widehat C_\eta,\widehat C_{1/3}\}\), the dashed white
-curve marks where the two bounds agree, the blue star marks the largest grid
-value in the slice, and the black diagonal is the boundary of the triangle.
-
-**The script still evaluates the previous reduction**: the domain
-\(r\ge\frac{33}{50}\), \(m+\lambda\le\frac3{25}\), the previous constants and the
-coefficient \(\frac14\) in front of \(R_0(V_{\mathrm{double}})\). It uses
-ordinary floating-point arithmetic, illustrates the landscape only, and is not
-part of the proof. It requires NumPy and Matplotlib.
