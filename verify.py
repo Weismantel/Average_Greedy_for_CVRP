@@ -16,10 +16,9 @@ from flint import arb, ctx, fmpq
 # exact value at any precision.
 ctx.prec = 128
 
-# The target of the reduction lemma. Bounds are compared against it with
-# a strict "<" in exact rational arithmetic, so a successful run establishes the
-# strict inequality
-RHO_MINUS_ALPHA = fmpq(1659, 1000)
+# The paper's beta.  Bounds are compared against it with a strict "<" in exact
+# rational arithmetic, so a successful run establishes the strict inequality
+BETA = fmpq(1659, 1000)
 
 # Fails only if a box cannot be subdivided far enough.  Depth is counted from
 # the task box, not from INITIAL_BOX, so the effective limit is
@@ -31,14 +30,14 @@ MAX_DEPTH = 90
 # parallel work.  Purely a scheduling parameter: their union is the initial box.
 TASK_SPLITS = 12
 
-# The triangular prism D of the reduction lemma (the paper calls it Delta):
+# The triangular prism Delta of the reduction lemma:
 #     659/1000 <= r <= 1,  w >= 0,  lambda >= 0,  w + lambda <= 91/750.
 R_MIN = fmpq(659, 1000)
 R_MAX = fmpq(1)
 W_PLUS_LAMBDA_CAP = fmpq(91, 750)
 
 # A box is the 6-tuple of exact rational endpoints (r_lo, r_hi, w_lo, w_hi,
-# lambda_lo, lambda_hi).  INITIAL_BOX is a superset of D: the constraint
+# lambda_lo, lambda_hi).  INITIAL_BOX is a superset of Delta: the constraint
 # w + lambda <= 91/750 is imposed in restrict(), the other bounds are exact.
 INITIAL_BOX = (R_MIN, R_MAX, fmpq(0), W_PLUS_LAMBDA_CAP, fmpq(0), W_PLUS_LAMBDA_CAP)
 
@@ -81,6 +80,10 @@ def R0_V_double(r, w, lam):
 
 
 def R1_V_eta_one(r, w, lam):
+    """R_1(V_eta^1) = R_1(V) - R_1(V_0^eta).
+
+    Equal to 1 - R_1(V_0^eta) because the reduction lemma moves every point
+    onto the face R_1(V) = Opt = 1, on which all of Delta lies."""
     return 1 - R1_V0_eta(r, w, lam)
 
 
@@ -92,11 +95,11 @@ def sigma_third(r, w, lam):
     )
 
 
-def R0_minus_R1_single(r, w, lam):
-    """R_0(V_single) - R_1(V_single), the quantity the README abbreviates Delta.
+def Theta(r, w, lam):
+    """Theta = R_0(V_single) - R_1(V_single).
 
-    Spelled out rather than named Delta because the paper's Delta is the prism,
-    which this file calls D."""
+    A shorthand of this repository only: the paper always writes it out, inside
+    D_eta, D_1 and D_2.  Deliberately not called Delta, which is the prism."""
     return R0_V_single(r, w, lam) - R1_V_single(r, w, lam)
 
 
@@ -142,7 +145,7 @@ def segment_upper_bound(p_lo, a_lo, b_hi, l, r):
     # in t, which the relaxation above handles fine.  The closed form below
     # divides by b_hi and b_hi^2, so this guard only keeps a division by zero
     # off every path.  It is unreachable for this certificate, where b_hi is
-    # 2 R_1(V_eta^1) + 2 Delta or sigma + c Delta and hence positive.
+    # 2 R_1(V_eta^1) + 2 Theta or sigma + c Theta and hence positive.
     if b_hi <= 0:
         return width
 
@@ -236,14 +239,13 @@ def integral_upper(p_lo, branches):
 # ---------------------------------------------------------------------------
 
 
-def upper_bound(box, target=RHO_MINUS_ALPHA):
+def upper_bound(box, target=BETA):
     """Certified upper bound, as an exact rational, for the supremum over the
-    box of min{C_eta - alpha * Opt, C_1/3 - alpha * Opt}, the two cost bounds
-    with their error terms omitted.
+    box of min{G_eta, G_1/3}.
 
-    The eta bound alone is returned as soon as it settles the box: the minimum
-    of the two is bounded by either one, so a value already below `target`
-    certifies the box even where the 1/3 bound would have been smaller.
+    G_eta alone is returned as soon as it settles the box: the minimum of the
+    two is bounded by either one, so a value already below `target` certifies
+    the box even where G_1/3 would have been smaller.
     """
     r_lo, r_hi, w_lo, w_hi, lam_lo, lam_hi = box
 
@@ -257,10 +259,10 @@ def upper_bound(box, target=RHO_MINUS_ALPHA):
     # needed, since it appears in a numerator that has to be over-estimated.
     p_lo = R0_V_single(*lo)
 
-    # Delta = R_0(V_single) - R_1(V_single) increases in w and in lambda.  It
+    # Theta = R_0(V_single) - R_1(V_single) increases in w and in lambda.  It
     # enters only the denominator slopes, which have to be over-estimated, so
     # only its maximum is needed.
-    delta_max = R0_minus_R1_single(*hi)
+    theta_max = Theta(*hi)
 
     # R_1(V_0^eta) = Opt - r decreases in r, so the lower corner maximizes it.
     R1_V0_eta_max = R1_V0_eta(*lo)
@@ -272,15 +274,14 @@ def upper_bound(box, target=RHO_MINUS_ALPHA):
     R1_V_eta_one_min = R1_V_eta_one(*lo)
     R1_V_eta_one_max = R1_V_eta_one(*hi)
 
-    # C_eta - alpha * Opt
-    #   = R_1(V_0^eta)
-    #     + 2 R_1(V_eta^1) int_0^1 min{1, (1 - R_0(V_single) t) / (a - b t)} dt,
-    #   a = 2 R_1(V_eta^1),   b = 2 R_1(V_eta^1) + 2 Delta.
-    branch_eta = (2 * R1_V_eta_one_min, 2 * R1_V_eta_one_max + 2 * delta_max)
-    integral_eta = integral_upper(p_lo, [branch_eta])
-    C_hat_eta_minus_alpha = R1_V0_eta_max + 2 * R1_V_eta_one_max * integral_eta
-    if C_hat_eta_minus_alpha < target:
-        return C_hat_eta_minus_alpha
+    # G_eta = R_1(V_0^eta) + 2 R_1(V_eta^1) int_0^1 min{1, N/D_eta} dt, where
+    # N/D_eta = (1 - R_0(V_single) t) / (a - b t) with
+    #   a = 2 R_1(V_eta^1),   b = 2 R_1(V_eta^1) + 2 Theta.
+    branch_D_eta = (2 * R1_V_eta_one_min, 2 * R1_V_eta_one_max + 2 * theta_max)
+    integral_eta = integral_upper(p_lo, [branch_D_eta])
+    G_eta = R1_V0_eta_max + 2 * R1_V_eta_one_max * integral_eta
+    if G_eta < target:
+        return G_eta
 
     # sigma_{1/3}(V_eta^1) = 3/2 r + 159/1000 + w increases in r and in w.
     sigma_min = sigma_third(*lo)
@@ -288,34 +289,30 @@ def upper_bound(box, target=RHO_MINUS_ALPHA):
 
     # R_0(V_double) = 91/125 - 4w - 6 lambda *decreases* in w and in lambda, so
     # its maximum sits at the *lower* corner.  It is subtracted in the
-    # denominator constant of Phi^(2), which therefore needs that maximum.
+    # denominator constant of D_2, which therefore needs that maximum.
     R0_double_max = R0_V_double(*lo)
 
-    # C_1/3 - alpha * Opt
-    #   = 3/2 R_1(V_0^eta)
-    #     + sigma int_0^1 min{1, Phi^(1), Phi^(2)} dt,
-    #   Phi^(1): a = sigma,                      b = sigma + 2 Delta,
-    #   Phi^(2): a = sigma - R_0(V_double) / 8,  b = sigma + 3/2 Delta.
+    # G_1/3 = 3/2 R_1(V_0^eta) + sigma int_0^1 min{1, N/D_1, N/D_2} dt, where
+    #   D_1: a = sigma,                      b = sigma + 2 Theta,
+    #   D_2: a = sigma - R_0(V_double) / 8,  b = sigma + 3/2 Theta.
     # The branches are listed in the order in which they attain the minimum: at
-    # t = 0 the denominator of Phi^(2) is smaller by R_0(V_double)/8 =
-    # 91/1000 - w/2 - 3lambda/4 >= 0 on D (since w/2 + 3lambda/4 <=
+    # t = 0 the denominator D_2 is smaller than D_1 by R_0(V_double)/8 =
+    # 91/1000 - w/2 - 3lambda/4 >= 0 on Delta (since w/2 + 3lambda/4 <=
     # 3(w + lambda)/4 <= 91/1000), and it decreases more slowly, by
-    # Delta/2 = 159/1000 + w/2 + lambda per unit of t, so the two swap exactly
+    # Theta/2 = 159/1000 + w/2 + lambda per unit of t, so the two swap exactly
     # once.
     branches_third = [
-        # Phi^(1)
-        (sigma_min, sigma_max + 2 * delta_max),
-        # Phi^(2)
-        (sigma_min - R0_double_max / 8, sigma_max + fmpq(3, 2) * delta_max),
+        # N/D_1
+        (sigma_min, sigma_max + 2 * theta_max),
+        # N/D_2
+        (sigma_min - R0_double_max / 8, sigma_max + fmpq(3, 2) * theta_max),
     ]
     integral_third = integral_upper(p_lo, branches_third)
-    C_hat_third_minus_alpha = (
-        fmpq(3, 2) * R1_V0_eta_max + sigma_max * integral_third
-    )
+    G_third = fmpq(3, 2) * R1_V0_eta_max + sigma_max * integral_third
 
-    if C_hat_third_minus_alpha < C_hat_eta_minus_alpha:
-        return C_hat_third_minus_alpha
-    return C_hat_eta_minus_alpha
+    if G_third < G_eta:
+        return G_third
+    return G_eta
 
 
 def restrict(box):
@@ -323,8 +320,8 @@ def restrict(box):
     that constraint already excludes every point of it.
 
     This one constraint is all that has to be tested: every box descends from
-    INITIAL_BOX by bisection, so its r range is contained in D's and its w and
-    lambda are non-negative by construction."""
+    INITIAL_BOX by bisection, so its r range is contained in Delta's and its w
+    and lambda are non-negative by construction."""
     r_lo, r_hi, w_lo, w_hi, lam_lo, lam_hi = box
 
     # Every point of the box violates the constraint if already the smallest
@@ -334,8 +331,8 @@ def restrict(box):
 
     # Every feasible point of the box has w <= 91/750 - lambda_lo and
     # lambda <= 91/750 - w_lo, so these two contractions keep the whole
-    # intersection of the box with D.  Neither can fall below the corresponding
-    # lower endpoint, because w_lo + lambda_lo <= 91/750 was just checked.
+    # intersection of the box with Delta.  Neither can fall below the
+    # corresponding lower endpoint, because w_lo + lam_lo <= 91/750 was checked.
     w_cap = W_PLUS_LAMBDA_CAP - lam_lo
     if w_cap < w_hi:
         w_hi = w_cap
@@ -345,15 +342,15 @@ def restrict(box):
     return (r_lo, r_hi, w_lo, w_hi, lam_lo, lam_hi)
 
 
-# The extents of D are 341/1000 in r and 91/750 in w and lambda; these are their
-# reciprocals, so that split() can compare the three widths on a common scale.
+# The extents of Delta are 341/1000 in r and 91/750 in w and lambda; these are
+# their reciprocals, so split() can compare the three widths on a common scale.
 _R_SCALE = 1 / (R_MAX - R_MIN)
 _WL_SCALE = 1 / W_PLUS_LAMBDA_CAP
 
 
 def split(box):
-    """Bisects the coordinate that is widest relative to its extent in D.  The
-    two halves share the midpoint, so their union is exactly the parent box;
+    """Bisects the coordinate that is widest relative to its extent in Delta.
+    The two halves share the midpoint, so their union is exactly the parent box;
     which coordinate is chosen is a pure heuristic.  Midpoints are exact
     rationals, so a non-degenerate box always splits into two non-degenerate
     halves."""
@@ -382,16 +379,16 @@ def split(box):
 
 
 def prove(box):
-    """Proves that min{C_eta - alpha * Opt, C_1/3 - alpha * Opt} <
-    RHO_MINUS_ALPHA on the whole intersection of `box` with D.  Returns
-    (largest certified bound or None, boxes visited, maximum depth reached
-    below `box`); raises Inconclusive if some sub-box could not be settled.
+    """Proves that min{G_eta, G_1/3} < BETA on the whole intersection of `box`
+    with Delta.  Returns (largest certified bound or None, boxes visited,
+    maximum depth reached below `box`); raises Inconclusive if some sub-box
+    could not be settled.
 
     The traversal keeps an explicit stack of (box, depth).  Its invariant is
     that the union of the stacked boxes together with the already accepted ones
-    covers box ∩ D: a popped box is either dropped by restrict() -- which only
-    ever discards points outside D -- or accepted, or replaced by the two halves
-    returned by split(), whose union is the popped box.
+    covers box ∩ Delta: a popped box is either dropped by restrict() -- which
+    only ever discards points outside Delta -- or accepted, or replaced by the
+    two halves returned by split(), whose union is the popped box.
     """
     stack = [(box, 0)]
     best = None
@@ -406,7 +403,7 @@ def prove(box):
         if depth > max_depth:
             max_depth = depth
         bound = upper_bound(current)
-        if bound < RHO_MINUS_ALPHA:
+        if bound < BETA:
             if best is None or bound > best:
                 best = bound
             continue
@@ -457,8 +454,8 @@ def main():
     args = parser.parse_args()
 
     # The tasks are a partition of INITIAL_BOX into 2^TASK_SPLITS boxes; proving
-    # the bound on each of them proves it on INITIAL_BOX, hence on D.  prove()
-    # is a pure function of one box and shares no state, so the only thing the
+    # the bound on each proves it on INITIAL_BOX, hence on Delta.  prove() is a
+    # pure function of one box and shares no state, so the only thing the
     # parallel run must guarantee is that every task is actually proved: Pool.map
     # returns one result per task and re-raises any exception from a worker.
     tasks = subdivide(INITIAL_BOX, TASK_SPLITS)
@@ -483,17 +480,17 @@ def main():
 
     assert len(results) == len(tasks), "a worker did not return a result"
     bounds = [bound for bound, _, _ in results if bound is not None]
-    assert bounds, "no box intersected D"
+    assert bounds, "no box intersected Delta"
     bound = max(bounds)
-    assert bound < RHO_MINUS_ALPHA, "accepted a bound that is not below the target"
+    assert bound < BETA, "accepted a bound that is not below the target"
 
     boxes = sum(visited for _, visited, _ in results)
     # Depth is counted below a task box, so the deepest box of the run sits
     # TASK_SPLITS + depth bisections below INITIAL_BOX.
     depth = max(d for _, _, d in results)
     print(
-        "PROVED: max min{C_eta - alpha, C_1/3 - alpha} <= %s < %s"
-        % (decimal_upper(bound), RHO_MINUS_ALPHA)
+        "PROVED: max min{G_eta, G_1/3} <= %s < %s"
+        % (decimal_upper(bound), BETA)
     )
     print(
         "boxes: %d, max depth per task: %d, jobs: %d, elapsed: %.1fs"
