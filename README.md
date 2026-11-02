@@ -1,7 +1,7 @@
 # Interval arithmetic for the α + 1.659 approximation for CVRP
 
-`verify.py` machine-checks the hypothesis of the lemma *Reduction to a
-three-dimensional prism*: that
+`verify.py` checks the assumption of the lemma *Reduction to a
+three-dimensional prism*:
 
 ```
     max_Δ min{ G_η , G_1/3 }  <  β = 1659/1000
